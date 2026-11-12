@@ -1,0 +1,31 @@
+name: Windows x64 build
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build/Release/MineCppClone.exe dist/
+          Compress-Archive -Path dist/MineCppClone.exe -DestinationPath MineCppClone-Windows-x64.zip -Force
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCppClone-Windows-x64
+          path: MineCppClone-Windows-x64.zip
+          if-no-files-found: error
