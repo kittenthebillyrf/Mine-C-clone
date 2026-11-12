@@ -125,7 +125,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
     for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
     bool inventoryOpen=false;
-    bool craftingOpen=false;
+    bool creativeOpen=false;
     bool paused=false;
     bool thirdPerson=false;
     bool captured=true;
@@ -198,18 +198,18 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const bool gamepad=IsGamepadAvailable(0);
         if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
             paused=!paused;
-            inventoryOpen=false; craftingOpen=false;
+            inventoryOpen=false; creativeOpen=false;
             captured=!paused;
             if(captured) DisableCursor(); else EnableCursor();
         }
         if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_UP)))) {
-            inventoryOpen=!inventoryOpen; craftingOpen=false;
+            inventoryOpen=!inventoryOpen; creativeOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        if(!paused && (IsKeyPressed(KEY_C)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_LEFT)))) {
-            craftingOpen=!craftingOpen; inventoryOpen=false;
-            captured=!craftingOpen;
+        if(!paused && IsKeyPressed(KEY_R)) {
+            creativeOpen=!creativeOpen; inventoryOpen=false;
+            captured=!creativeOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
         if(!paused && (IsKeyPressed(KEY_F5)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_THUMB)))) {
@@ -293,7 +293,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWi*controlDth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(!paused&&!inventoryOpen&&!craftingOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
@@ -331,7 +331,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: R2 / ZR | Place: L2 / ZL | Hotbar: L1/R1",14,GetScreenHeight()-28,13,RAYWHITE);
+        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: R2 / ZR | Place: L2 / ZL | Hotbar: L1/R1 | E: inventory + crafting | R: creative",14,GetScreenHeight()-28,13,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
@@ -343,15 +343,14 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,11,RAYWHITE);
             if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
-        if(craftingOpen) {
-            const int panelW=620,panelH=360,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+        if(creativeOpen) {
+            const int panelW=560,panelH=330,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             DrawRectangle(panelX,panelY,panelW,panelH,Fade(Color{38,38,42,255},0.97f));
             DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
-            DrawText("CRAFTING",panelX+22,panelY+18,26,RAYWHITE);
-            DrawText("Recipe book",panelX+24,panelY+68,20,YELLOW);
-            DrawText("No craftable recipes yet.",panelX+24,panelY+112,19,RAYWHITE);
-            DrawText("The recipe system and console-style recipe selection are next.",panelX+24,panelY+148,16,LIGHTGRAY);
-            DrawText("C / Square: close",panelX+24,panelY+310,16,RAYWHITE);
+            DrawText("CREATIVE MODE",panelX+22,panelY+18,26,RAYWHITE);
+            DrawText("Creative inventory is not implemented yet.",panelX+24,panelY+88,19,YELLOW);
+            DrawText("This menu will contain the full block and item catalog.",panelX+24,panelY+126,16,LIGHTGRAY);
+            DrawText("R: close",panelX+24,panelY+282,16,RAYWHITE);
         }
         if(paused) {
             DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.68f));
@@ -372,7 +371,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     DrawText(TextFormat("%i",inventory[i].count),sx+27,sy+34,12,RAYWHITE);
                 }
             }
-            DrawText("Hotbar: keys 1-9 | Place uses one item | Breaking adds one item",panelX+18,panelY+286,14,RAYWHITE);
+            DrawText("CRAFTING: recipe area is built into this inventory (recipes coming next)",panelX+18,panelY+252,14,YELLOW);\n            DrawText("Hotbar: keys 1-9 | R: creative menu",panelX+18,panelY+286,14,RAYWHITE);
         }
         DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py/BLOCK,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
