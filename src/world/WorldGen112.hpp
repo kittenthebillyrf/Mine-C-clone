@@ -50,6 +50,8 @@ private:
     std::unique_ptr<OctaveNoise112> low_;
     std::unique_ptr<OctaveNoise112> high_;
     std::unique_ptr<OctaveNoise112> selector_;
-    std::unique_ptr<OctaveNoise112> detail_;
+    std::unique_ptr<OctaveNoise112> scale_;
+    std::unique_ptr<OctaveNoise112> depth_;
+    std::unique_ptr<OctaveNoise112> forest_;
 };
 }
