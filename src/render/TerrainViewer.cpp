@@ -126,8 +126,65 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
     bool inventoryOpen=false;
     bool captured=true;
+    bool inMenu=true;
+    bool optionsOpen=false;
+    float menuYaw=0.0f;
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
+        if(inMenu) {
+            menuYaw+=dt*0.055f;
+            Camera3D menuCamera{};
+            const float cx=float(size)*BLOCK*0.5f, cz=float(size)*BLOCK*0.5f;
+            menuCamera.position=Vector3{cx+std::sin(menuYaw)*48.0f,34.0f,cz+std::cos(menuYaw)*48.0f};
+            menuCamera.target=Vector3{cx,14.0f,cz};
+            menuCamera.up=Vector3{0,1,0}; menuCamera.fovy=65.0f; menuCamera.projection=CAMERA_PERSPECTIVE;
+            BeginDrawing();
+            ClearBackground(Color{110,160,205,255});
+            BeginMode3D(menuCamera);
+            const int center=int(size/2);
+            for(int z=std::max(0,center-17);z<std::min(size,center+18);++z) {
+                for(int x=std::max(0,center-17);x<std::min(size,center+18);++x) {
+                    const int top=surface_y(world,x,z);
+                    for(int y=std::max(0,top-5);y<top;++y) {
+                        const BlockId id=world.get_block(x,y,z);
+                        if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air))
+                            DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
+                    }
+                }
+            }
+            EndMode3D();
+            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.34f));
+            DrawText("MINECRAFT",GetScreenWidth()/2-220,92,64,RAYWHITE);
+            DrawText("C++ EDITION",GetScreenWidth()/2-68,158,22,YELLOW);
+            DrawText("A block world is waiting for you",GetScreenWidth()/2-150,194,18,RAYWHITE);
+            const int bw=300,bh=44,gap=8,bx=GetScreenWidth()/2-bw/2,by=optionsOpen?330:300;
+            const char* labels[4]={"Singleplayer","Multiplayer","Options","Quit Game"};
+            const int count=optionsOpen?1:4;
+            const Vector2 mouse=GetMousePosition();
+            for(int i=0;i<count;++i) {
+                const int y=by+i*(bh+gap);
+                const Rectangle rect{float(bx),float(y),float(bw),float(bh)};
+                const bool hover=CheckCollisionPointRec(mouse,rect);
+                DrawRectangleRec(rect,hover?Color{25,25,25,245}:Color{75,75,75,225});
+                DrawRectangleLinesEx(rect,2,hover?RAYWHITE:Color{25,25,25,255});
+                const char* label=optionsOpen?"Back":labels[i];
+                DrawText(label,bx+(bw-MeasureText(label,22))/2,y+10,22,RAYWHITE);
+                if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    if(optionsOpen) optionsOpen=false;
+                    else if(i==0) { inMenu=false; captured=true; DisableCursor(); }
+                    else if(i==2) optionsOpen=true;
+                    else if(i==3) SetWindowShouldClose(true);
+                }
+            }
+            if(!optionsOpen) DrawText("Multiplayer is coming in a future update",GetScreenWidth()/2-178,by+4*(bh+gap)+8,15,RAYWHITE);
+            else {
+                DrawText("Graphics: 3D voxel panorama",GetScreenWidth()/2-125,by+bh+18,17,RAYWHITE);
+                DrawText("World seed and display settings will be added here",GetScreenWidth()/2-215,by+bh+44,15,RAYWHITE);
+            }
+            DrawText("Mine C++ Clone  |  Inspired by the Java 1.12 era",12,GetScreenHeight()-28,14,RAYWHITE);
+            EndDrawing();
+            continue;
+        }
         if(IsKeyPressed(KEY_ESCAPE)) { captured=!captured; inventoryOpen=false; if(captured) DisableCursor(); else EnableCursor(); }
         if(IsKeyPressed(KEY_E)) {
             inventoryOpen=!inventoryOpen;
