@@ -3,32 +3,31 @@
 PC-first C++20 voxel sandbox prototype inspired by Minecraft Java 1.12.2. Independent implementation; no Minecraft source code or proprietary assets are included.
 
 ## Current milestone: playable sandbox prototype
-Launch the game:
+Launch:
 ```powershell
 .\build\Release\MineCppClone.exe --3d --size 64 --seed 1122
 ```
 
 ### Controls
-- WASD — walk
-- Mouse — look around
-- Space — jump
-- Left Shift — run
-- Left mouse button — break the targeted block
-- Right mouse button — place the selected block
-- 1–5 or mouse wheel — select hotbar slot
+- WASD — move; mouse — look
+- Space — jump; Left Shift — run
+- Left mouse — break the targeted block
+- Right mouse — place one block from the selected stack
+- 1–9 / mouse wheel — select hotbar slot
+- E — open/close inventory
+- In the inventory, click a hotbar slot to select it; click a storage slot to swap it with the selected hotbar slot
 - Escape — release / recapture the mouse
 
 ### Implemented gameplay
 - First-person camera and mouse look.
-- Player walking, running, jumping and basic ground-height collision.
-- A small generated voxel world with grass, dirt, stone, sand, bedrock and water.
-- Target selection by a short ray from the crosshair.
-- Breaking and placing blocks.
-- Five-slot hotbar with keyboard and mouse-wheel selection.
-- Rendering limited to a nearby area around the player.
+- Walking, running, jumping and basic height-based ground collision.
+- Seeded block world containing grass, dirt, stone, sand, bedrock and water.
+- Crosshair ray targeting, block breaking and placement.
+- 9-slot hotbar and 36-slot inventory.
+- Block stacks, stack limit of 64, pickup when breaking and consumption when placing.
+- Nearby block rendering around the player.
 
 ## Existing foundations
-- Seeded terrain generation.
 - Block registry and 16 x 256 x 16 chunk storage.
 - World block access across positive and negative chunk coordinates.
 - Six language catalogs: English, Russian, Spanish, German, French and Simplified Chinese.
@@ -44,12 +43,12 @@ ctest --test-dir build -C Release --output-on-failure
 .\build\Release\MineCppClone.exe --self-test
 ```
 
-## Roadmap
-1. Playable first-person block sandbox prototype
-2. Robust player collision and block-face targeting
-3. Chunk mesh generation and distance-based chunk streaming
-4. Inventory, survival/creative modes, crafting and saving
-5. Caves, ores, structures and richer biome generation
+## Next milestones
+1. Reliable voxel collision and block-face targeting
+2. Chunk mesh generation and distance-based chunk streaming
+3. Saving/loading worlds
+4. Survival/creative modes, health, hunger and crafting
+5. Caves, ores and structures
 6. Cross-platform multiplayer
 
-This is an early prototype, not a complete Minecraft 1.12.2 recreation. The current world is deliberately small and the player collision is a first pass. Windows builds are downloadable from GitHub Actions only after a successful workflow run.
+This remains an early playable prototype, not a complete Minecraft 1.12.2 recreation. Collision is simplified, the world is small, and persistence, full crafting, mobs and multiplayer are not implemented. Windows builds are downloadable from GitHub Actions only after a successful workflow run.
