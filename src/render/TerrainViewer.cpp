@@ -123,10 +123,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
         const float rightX=std::cos(yaw),rightZ=std::sin(yaw);
         float mx=0,mz=0;
-        if(IsKeyDown(KEY_W)) { mx+=forwardX; mz+=forwardZ; }
-        if(IsKeyDown(KEY_S)) { mx-=forwardX; mz-=forwardZ; }
-        if(IsKeyDown(KEY_D)) { mx+=rightX; mz+=rightZ; }
-        if(IsKeyDown(KEY_A)) { mx-=rightX; mz-=rightZ; }
+        if(captured && IsKeyDown(KEY_W)) { mx+=forwardX; mz+=forwardZ; }
+        if(captured && IsKeyDown(KEY_S)) { mx-=forwardX; mz-=forwardZ; }
+        if(captured && IsKeyDown(KEY_D)) { mx+=rightX; mz+=rightZ; }
+        if(captured && IsKeyDown(KEY_A)) { mx-=rightX; mz-=rightZ; }
         const float len=std::sqrt(mx*mx+mz*mz);
         if(len>0) { mx/=len; mz/=len; }
         const float speed=IsKeyDown(KEY_LEFT_SHIFT)?10.0f:6.0f;
@@ -135,14 +135,16 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
         const float ground=float(surface_y(world,groundX,groundZ))*BLOCK;
         if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
-        if(IsKeyPressed(KEY_SPACE)&&grounded) { vy=10.5f; grounded=false; }
+        if(captured && IsKeyPressed(KEY_SPACE)&&grounded) { vy=10.5f; grounded=false; }
         vy-=25.0f*dt; py+=vy*dt;
         const float floorY=float(surface_y(world,int(px),int(pz)))*BLOCK;
         if(py<=floorY) { py=floorY; vy=0; grounded=true; }
 
-        for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
-        const Vector2 wheel=GetMouseWheelMoveV();
-        if(wheel.y!=0) selected=(selected+(wheel.y>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+        if(captured) {
+            for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
+            const Vector2 wheel=GetMouseWheelMoveV();
+            if(wheel.y!=0) selected=(selected+(wheel.y>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+        }
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             const Vector2 mouse=GetMousePosition();
@@ -191,7 +193,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
         const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
-            for(int y=0;y<Chunk::Height;++y) {
+            const int minY=std::max(0,int(py/BLOCK)-18),maxY=std::min(Chunk::Height,int(py/BLOCK)+22);
+            for(int y=minY;y<maxY;++y) {
                 const BlockId id=world.get_block(x,y,z);
                 if(id==BlockId::Air) continue;
                 if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
