@@ -85,7 +85,7 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
     for(int z=0;z<16;++z) for(int x=0;x<16;++x) {
         const int wx=ox+x,wz=oz+z;
         const int h=terrain_height(wx,wz);
-        const double temperature=detail_.sample(wx/420.0,0,wz/420.0);
+        const double temperature=detail_->sample(wx/420.0,0,wz/420.0);
         const bool cold=temperature < -0.35;
         const bool dry=temperature > 0.45;
         for(int y=0;y<=h;++y) {
