@@ -68,13 +68,15 @@ OverworldGenerator112::OverworldGenerator112(std::int64_t seed) : seed_(seed) {
     low_=std::make_unique<OctaveNoise112>(random,16);
     high_=std::make_unique<OctaveNoise112>(random,16);
     selector_=std::make_unique<OctaveNoise112>(random,8);
-    detail_=std::make_unique<OctaveNoise112>(random,4);
+    scale_=std::make_unique<OctaveNoise112>(random,10);
+    depth_=std::make_unique<OctaveNoise112>(random,16);
+    forest_=std::make_unique<OctaveNoise112>(random,8);
 }
 int OverworldGenerator112::terrain_height(int x,int z) const {
     const double broad=low_->sample(x/180.0,0.0,z/180.0);
     const double high=high_->sample(x/72.0,0.0,z/72.0);
     const double selector=selector_->sample(x/110.0,0.0,z/110.0);
-    const double detail=detail_->sample(x/24.0,0.0,z/24.0);
+    const double detail=scale_->sample(x/24.0,0.0,z/24.0);
     const double blend=std::clamp((selector+1.0)*0.5,0.0,1.0);
     const double continental=lerp(blend,broad*0.55,high*0.8);
     return std::clamp(int(63.0+continental*23.0+detail*2.0),4,120);
@@ -85,7 +87,7 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
     for(int z=0;z<16;++z) for(int x=0;x<16;++x) {
         const int wx=ox+x,wz=oz+z;
         const int h=terrain_height(wx,wz);
-        const double temperature=detail_->sample(wx/420.0,0,wz/420.0);
+        const double temperature=forest_->sample(wx/420.0,0,wz/420.0);
         const bool cold=temperature < -0.35;
         const bool dry=temperature > 0.45;
         for(int y=0;y<=h;++y) {
