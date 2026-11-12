@@ -84,6 +84,39 @@ double OctaveNoise112::sample(double x,double y,double z) const {
     }
     return result;
 }
+std::vector<double> OctaveNoise112::generate_region(int x_offset,int y_offset,int z_offset,
+    int x_size,int y_size,int z_size,double x_scale,double y_scale,double z_scale) const {
+    if(x_size<=0||y_size<=0||z_size<=0) return {};
+    const std::size_t total=std::size_t(x_size)*std::size_t(y_size)*std::size_t(z_size);
+    std::vector<double> values(total,0.0);
+    double octaveScale=1.0;
+    for(const auto& octave:octaves_) {
+        const double startX=double(x_offset)*octaveScale*x_scale;
+        const double startY=double(y_offset)*octaveScale*y_scale;
+        const double startZ=double(z_offset)*octaveScale*z_scale;
+        const auto floorX=static_cast<std::int64_t>(std::floor(startX));
+        const auto floorZ=static_cast<std::int64_t>(std::floor(startZ));
+        const double baseX=(startX-double(floorX))+double(floorX%16777216LL);
+        const double baseZ=(startZ-double(floorZ))+double(floorZ%16777216LL);
+        const double stepX=x_scale*octaveScale;
+        const double stepY=y_scale*octaveScale;
+        const double stepZ=z_scale*octaveScale;
+        const double amplitude=1.0/octaveScale;
+        std::size_t index=0;
+        for(int x=0;x<x_size;++x) {
+            const double nx=baseX+double(x)*stepX;
+            for(int z=0;z<z_size;++z) {
+                const double nz=baseZ+double(z)*stepZ;
+                for(int y=0;y<y_size;++y) {
+                    const double ny=startY+double(y)*stepY;
+                    values[index++]+=octave.sample(nx,ny,nz)*amplitude;
+                }
+            }
+        }
+        octaveScale*=0.5;
+    }
+    return values;
+}
 OverworldGenerator112::OverworldGenerator112(std::int64_t seed) : seed_(seed) {
     JavaRandom random(seed);
     low_=std::make_unique<OctaveNoise112>(random,16);
