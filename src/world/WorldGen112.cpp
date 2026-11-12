@@ -127,6 +127,76 @@ OverworldGenerator112::OverworldGenerator112(std::int64_t seed) : seed_(seed) {
     depth_=std::make_unique<OctaveNoise112>(random,16);
     forest_=std::make_unique<OctaveNoise112>(random,8);
 }
+DensityMap112 OverworldGenerator112::generate_density_map(int chunk_x,int chunk_z,
+    const std::array<BiomeTerrain112,100>& biome_grid) const {
+    constexpr double coordinate_scale=684.412;
+    constexpr double height_scale=684.412;
+    constexpr double lower_limit_scale=512.0;
+    constexpr double upper_limit_scale=512.0;
+    constexpr double main_scale_x=80.0,main_scale_y=160.0,main_scale_z=80.0;
+    constexpr double depth_scale_x=200.0,depth_scale_z=200.0;
+    constexpr double base_size=8.5,stretch_y=12.0;
+    std::array<double,25> biome_weights{};
+    for(int dz=-2;dz<=2;++dz) for(int dx=-2;dx<=2;++dx)
+        biome_weights[(dx+2)+(dz+2)*5]=10.0/std::sqrt(double(dx*dx+dz*dz)+0.2);
+
+    const int ox=chunk_x*4,oz=chunk_z*4;
+    const auto depth_region=depth_->generate_region(ox,10,oz,5,1,5,
+        depth_scale_x,1.0,depth_scale_z);
+    const auto main_region=selector_->generate_region(ox,0,oz,5,33,5,
+        coordinate_scale/main_scale_x,height_scale/main_scale_y,coordinate_scale/main_scale_z);
+    const auto min_region=low_->generate_region(ox,0,oz,5,33,5,
+        coordinate_scale,height_scale,coordinate_scale);
+    const auto max_region=high_->generate_region(ox,0,oz,5,33,5,
+        coordinate_scale,height_scale,coordinate_scale);
+    DensityMap112 result;
+    std::size_t density_index=0,depth_index=0;
+    for(int x=0;x<5;++x) for(int z=0;z<5;++z) {
+        const BiomeTerrain112& center=biome_grid[(x+2)+(z+2)*10];
+        double variation_sum=0.0,base_sum=0.0,weight_sum=0.0;
+        for(int dz=-2;dz<=2;++dz) for(int dx=-2;dx<=2;++dx) {
+            const BiomeTerrain112& biome=biome_grid[(x+dx+2)+(z+dz+2)*10];
+            const double base=biome.base_height;
+            const double variation=biome.height_variation;
+            double weight=biome_weights[(dx+2)+(dz+2)*5]/(base+2.0);
+            if(biome.base_height>center.base_height) weight*=0.5;
+            variation_sum+=variation*weight;
+            base_sum+=base*weight;
+            weight_sum+=weight;
+        }
+        const double variation=((variation_sum/weight_sum)*0.9+0.1);
+        const double base=((base_sum/weight_sum)*4.0-1.0)/8.0;
+        double depth=depth_region[depth_index++]/8000.0;
+        if(depth<0.0) depth=-depth*0.3;
+        depth=depth*3.0-2.0;
+        if(depth<0.0) {
+            depth=std::max(-1.0,depth/2.0);
+            depth=depth/1.4/2.0;
+        } else {
+            depth=std::min(1.0,depth)/8.0;
+        }
+        double adjusted_base=base+depth*0.2;
+        adjusted_base=adjusted_base*base_size/8.0;
+        const double vertical_center=base_size+adjusted_base*4.0;
+        for(int y=0;y<33;++y) {
+            double vertical=(double(y)-vertical_center)*stretch_y*128.0/256.0/variation;
+            if(vertical<0.0) vertical*=4.0;
+            const double low=min_region[density_index]/lower_limit_scale;
+            const double high=max_region[density_index]/upper_limit_scale;
+            const double selector=(main_region[density_index]/10.0+1.0)/2.0;
+            const double blend=std::clamp(selector,0.0,1.0);
+            double density=low+(high-low)*blend-vertical;
+            if(y>29) {
+                const double fade_top=double(y-29)/3.0;
+                density=density*(1.0-fade_top)-10.0*fade_top;
+            }
+            result.values[density_index]=density;
+            ++density_index;
+        }
+    }
+    return result;
+}
+
 int OverworldGenerator112::terrain_height(int x,int z) const {
     const double broad=low_->sample(x/180.0,0.0,z/180.0);
     const double high=high_->sample(x/72.0,0.0,z/72.0);
