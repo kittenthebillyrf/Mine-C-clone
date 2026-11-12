@@ -153,7 +153,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     for(int y=std::max(0,top-5);y<top;++y) {
                         const BlockId id=world.get_block(x,y,z);
                         if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air))
-                            DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
+                            draw_block(blockTextures,id,block_center(x,y,z));
                     }
                 }
             }
@@ -165,24 +165,35 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int bw=320,bh=44,gap=8,bx=GetScreenWidth()/2-bw/2,by=(optionsOpen||multiplayerOpen)?330:300;
             const char* labels[4]={"Singleplayer","Multiplayer","Options","Quit Game"};
             const int count=(optionsOpen||multiplayerOpen)?1:4;
+            const bool menuPad=IsGamepadAvailable(0);
+            if(menuPad) {
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)) menuSelection=(menuSelection+count-1)%count;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)) menuSelection=(menuSelection+1)%count;
+            }
+            if(IsKeyPressed(KEY_UP)) menuSelection=(menuSelection+count-1)%count;
+            if(IsKeyPressed(KEY_DOWN)) menuSelection=(menuSelection+1)%count;
+            const bool menuConfirm=IsKeyPressed(KEY_ENTER)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+            const bool menuBack=IsKeyPressed(KEY_ESCAPE)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
             const Vector2 mouse=GetMousePosition();
             for(int i=0;i<count;++i) {
                 const int y=by+i*(bh+gap);
                 const Rectangle rect{float(bx),float(y),float(bw),float(bh)};
                 const bool hover=CheckCollisionPointRec(mouse,rect);
-                DrawRectangleRec(rect,hover?Color{25,25,25,245}:Color{75,75,75,225});
-                DrawRectangleLinesEx(rect,2,hover?RAYWHITE:Color{25,25,25,255});
+                const bool focused=menuSelection==i;
+                DrawRectangleRec(rect,(hover||focused)?Color{25,25,25,245}:Color{75,75,75,225});
+                DrawRectangleLinesEx(rect,2,(hover||focused)?RAYWHITE:Color{25,25,25,255});
                 const char* label=(optionsOpen||multiplayerOpen)?"Back":labels[i];
                 DrawText(label,bx+(bw-MeasureText(label,22))/2,y+10,22,RAYWHITE);
-                if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    if(optionsOpen||multiplayerOpen) { optionsOpen=false; multiplayerOpen=false; }
+                if((hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))||(focused&&menuConfirm)) {
+                    if(optionsOpen||multiplayerOpen) { optionsOpen=false; multiplayerOpen=false; menuSelection=0; }
                     else if(i==0) { inMenu=false; captured=true; DisableCursor(); }
-                    else if(i==1) multiplayerOpen=true;
-                    else if(i==2) optionsOpen=true;
+                    else if(i==1) { multiplayerOpen=true; menuSelection=0; }
+                    else if(i==2) { optionsOpen=true; menuSelection=0; }
                     else if(i==3) requestQuit=true;
                 }
             }
-            if(!optionsOpen&&!multiplayerOpen) DrawText("Multiplayer is coming in a future update",GetScreenWidth()/2-178,by+4*(bh+gap)+8,15,RAYWHITE);
+            if((optionsOpen||multiplayerOpen)&&menuBack) { optionsOpen=false; multiplayerOpen=false; menuSelection=0; }
+            if(!optionsOpen&&!multiplayerOpen) DrawText("D-pad: select  |  A: confirm",GetScreenWidth()/2-105,by+4*(bh+gap)+8,15,RAYWHITE);
             else if(multiplayerOpen) {
                 DrawText("Online and LAN multiplayer are not implemented yet",GetScreenWidth()/2-205,by+bh+22,17,RAYWHITE);
                 DrawText("This screen will be connected when networking is added",GetScreenWidth()/2-225,by+bh+50,15,RAYWHITE);
@@ -202,7 +213,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             captured=!paused;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_UP)))) {
+        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)))) {
             inventoryOpen=!inventoryOpen; creativeOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
@@ -218,13 +229,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float controlDt=(paused||inventoryOpen)?0.0f:dt;
         if(captured) {
             const Vector2 md=GetMouseDelta();
-            yaw-=md.x*0.0025f;
+            yaw+=md.x*0.0025f;
             pitch=std::clamp(pitch-md.y*0.0025f,-1.45f,1.45f);
             if(gamepad) {
                 const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
                 const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
-                if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f*dt;
-                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f*dt,-1.45f,1.45f);
+                if(std::abs(lookX)>0.16f) yaw+=lookX*2.2f*dt;
+                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch-lookY*2.0f*dt,-1.45f,1.45f);
             }
         }
         const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
@@ -380,6 +391,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndDrawing();
     }
     { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
+    for(unsigned int i=1;i<7;++i) if(blockTextures[i].id!=0) UnloadTexture(blockTextures[i]);
     EnableCursor();
     CloseWindow();
     return 0;
