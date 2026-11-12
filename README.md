@@ -1,30 +1,31 @@
 # Mine C++ Clone
 
-PC-first C++20 voxel sandbox prototype inspired by the terrain and gameplay era of Minecraft Java 1.12.2. Independent implementation; no Minecraft source code or proprietary assets are included.
+PC-first C++20 voxel sandbox prototype inspired by Minecraft Java 1.12.2. Independent implementation; no Minecraft source code or proprietary assets are included.
 
-## Current milestone: first 3D terrain preview
-- Seeded procedural heightmap generation.
-- Interactive 3D terrain viewer powered by raylib 5.5.
-- First-person camera controls: WASD + mouse; ESC closes the viewer.
-- Block registry and 16 x 256 x 16 chunk storage.
-- World block access works across positive and negative chunk coordinates.
+## Current milestone: block-based 3D terrain
+- Seeded 3D scene with block-column terrain rather than a smooth heightmap.
+- Large terrain blocks with a 2x2x2 world-unit scale.
+- Procedural hills, ridges, lowlands and basic climate-based surface regions.
+- Water fill up to a shared sea level.
+- Procedurally scattered simple trees.
+- First-person camera: WASD + mouse; ESC closes the viewer.
+- Block registry, 16 x 256 x 16 chunk storage and negative-coordinate world access.
 - Six language catalogs: English, Russian, Spanish, German, French and Simplified Chinese.
 - Windows x64 build and CTest workflow.
 
 ## Run
-Open the 3D preview:
+Open the 3D world:
 ```powershell
-.\build\Release\MineCppClone.exe --3d --size 256 --seed 1122
+.\build\Release\MineCppClone.exe --3d --size 128 --seed 1122
 ```
-Export a terrain image:
+Change the world size and seed:
+```powershell
+.\build\Release\MineCppClone.exe --3d --size 192 --seed 42
+```
+Export a 2D overview image:
 ```powershell
 .\build\Release\MineCppClone.exe --size 512 --seed 1122 --output terrain.ppm --lang ru
 ```
-Show translated help:
-```powershell
-.\build\Release\MineCppClone.exe --help --lang ru
-```
-Language codes: `en`, `ru`, `es`, `de`, `fr`, `zh_CN`.
 
 ## Build and test
 Requires Visual Studio 2022 Build Tools with C++ workload and CMake. CMake fetches raylib 5.5 during configuration.
@@ -37,11 +38,11 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 ## Roadmap
-1. Terrain and world data
-2. Chunk storage and block registry
-3. 3D rendering and camera prototype
-4. Player collision and voxel interaction
+1. Block terrain generation and 3D preview
+2. True voxel chunk meshing and chunk streaming
+3. Player collision, jumping and block interaction
+4. Caves, ores, rivers and richer biome rules
 5. Inventory, survival/creative modes and crafting
 6. Save/load and cross-platform multiplayer
 
-The 3D preview currently renders a generated heightmap as a terrain surface; it is not yet a fully block-by-block Minecraft-style world or a complete playable game. Windows builds are published as GitHub Actions artifacts after successful CI.
+Current limitations: terrain is rendered as large block-shaped columns, not yet as individually editable voxel blocks. Caves, proper chunk streaming and gameplay physics are not implemented yet. Windows builds are published as GitHub Actions artifacts after successful CI.
