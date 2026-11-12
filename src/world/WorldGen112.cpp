@@ -90,7 +90,7 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
             BlockId id=BlockId::Stone;
             if(y==0) id=BlockId::Bedrock;
             else if(y>=h-3) {
-                if(y==h) id=cold?BlockId::Snow:(dry?BlockId::Sand:BlockId::Grass);
+                if(y==h) id=cold?BlockId::Sand:(dry?BlockId::Sand:BlockId::Grass);
                 else id=(dry||h<=sea+1)?BlockId::Sand:BlockId::Dirt;
             }
             world.set_block(wx,y,wz,id);
