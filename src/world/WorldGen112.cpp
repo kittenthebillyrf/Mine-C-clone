@@ -23,7 +23,12 @@ int JavaRandom::next_int(int bound) {
     if(bound<=0) return 0;
     if((bound&-bound)==bound) return int((std::uint64_t(bound)*next_bits(31))>>31);
     std::uint32_t bits=0; int value=0;
-    do { bits=next_bits(31); value=int(bits%std::uint32_t(bound)); } while(std::int64_t(bits)-value+(bound-1)<0);
+    do {
+        bits=next_bits(31);
+        value=int(bits%std::uint32_t(bound));
+        // java.util.Random performs this rejection test with signed 32-bit
+        // overflow; preserve that behavior for bit-for-bit RNG compatibility.
+    } while(static_cast<std::int32_t>(bits-std::uint32_t(value)+std::uint32_t(bound-1))<0);
     return value;
 }
 double JavaRandom::next_double() {
