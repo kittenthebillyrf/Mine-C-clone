@@ -56,28 +56,28 @@ Color color_for(mc::world::BlockId id) {
         default:return BLANK;
     }
 }
-Texture2D make_block_texture(mc::world::BlockId id) {
-    Image image=GenImageColor(16,16,WHITE);
-    const Color base=color_for(id);
-    for(int y=0;y<16;++y) for(int x=0;x<16;++x) {
-        const std::uint32_t h=hash2(x,y,0x51f15e5u+static_cast<std::uint32_t>(id)*977u);
-        const int variation=int(h%37u)-18;
-        Color c=base;
-        c.r=static_cast<unsigned char>(std::clamp(int(base.r)+variation,0,255));
-        c.g=static_cast<unsigned char>(std::clamp(int(base.g)+variation,0,255));
-        c.b=static_cast<unsigned char>(std::clamp(int(base.b)+variation,0,255));
-        if(id==mc::world::BlockId::Grass && y<4) c=Color{75,174,58,255};
-        if(id==mc::world::BlockId::Water) c=Color{static_cast<unsigned char>(35+int(h%18u)),static_cast<unsigned char>(105+int(h%35u)),static_cast<unsigned char>(190+int(h%45u)),210};
-        ImageDrawPixel(&image,x,y,c);
+const char* texture_path(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    switch(id) {
+        case BlockId::Stone:return "romfs:/textures/stone.png";
+        case BlockId::Dirt:return "romfs:/textures/dirt.png";
+        case BlockId::Grass:return "romfs:/textures/grass.png";
+        case BlockId::Sand:return "romfs:/textures/sand.png";
+        case BlockId::Bedrock:return "romfs:/textures/bedrock.png";
+        default:return nullptr;
     }
-    Texture2D texture=LoadTextureFromImage(image);
-    UnloadImage(image);
-    SetTextureFilter(texture,TEXTURE_FILTER_POINT);
-    return texture;
 }
-void draw_block(const Texture2D* textures,mc::world::BlockId id,Vector3 center) {
+void draw_block(Texture2D* textures,mc::world::BlockId id,Vector3 center) {
     const auto index=static_cast<unsigned int>(id);
-    if(index<7 && textures[index].id!=0) DrawCubeTexture(textures[index],center,BLOCK,BLOCK,BLOCK,WHITE);
+    if(index>=7) return;
+    if(textures[index].id==0) {
+        const char* path=texture_path(id);
+        if(path && FileExists(path)) {
+            textures[index]=LoadTexture(path);
+            if(textures[index].id!=0) SetTextureFilter(textures[index],TEXTURE_FILTER_POINT);
+        }
+    }
+    if(textures[index].id!=0) DrawCubeTexture(textures[index],center,BLOCK,BLOCK,BLOCK,WHITE);
     else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
@@ -141,7 +141,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     SetTargetFPS(120);
     DisableCursor();
     Texture2D blockTextures[7]{};
-    for(unsigned int i=1;i<7;++i) blockTextures[i]=make_block_texture(static_cast<BlockId>(i));
     float px=float(size)*0.5f,pz=float(size)*0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
     float vy=0.0f,yaw=0.0f,pitch=-0.18f;
