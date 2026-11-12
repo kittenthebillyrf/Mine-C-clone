@@ -1,0 +1,45 @@
+name: Nintendo Switch NRO
+
+on:
+  push:
+    branches: [switch-port]
+    paths:
+      - "src/**"
+      - "switch/**"
+      - ".github/workflows/switch-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-switch:
+    name: Build MineCppClone.nro
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Checkout raylib Switch backend
+        run: git clone --depth 1 https://github.com/luizpestana/raylib-nx.git "$GITHUB_WORKSPACE/raylib-nx"
+
+      - name: Build raylib for Nintendo Switch
+        run: make -C "$GITHUB_WORKSPACE/raylib-nx/src" PLATFORM=PLATFORM_NX
+
+      - name: Build game NRO
+        env:
+          RAYLIB_NX: ${{ github.workspace }}/raylib-nx
+        run: make -C switch
+
+      - name: Upload NRO
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCppClone-Nintendo-Switch
+          path: |
+            switch/MineCppClone.nro
+            switch/MineCppClone.elf
+            switch/MineCppClone.nacp
+          if-no-files-found: error
+          retention-days: 14
