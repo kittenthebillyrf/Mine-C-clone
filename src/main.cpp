@@ -1,4 +1,5 @@
 #include "i18n/Localization.hpp"
+#include "world/World.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -43,16 +44,29 @@ std::string replace_all(std::string value, const std::string& token, const std::
     }
     return value;
 }
+bool run_world_self_test() {
+    mc::world::World world;
+    if(world.get_block(0,10,0)!=mc::world::BlockId::Air) return false;
+    if(!world.set_block(0,10,0,mc::world::BlockId::Stone)) return false;
+    if(!world.set_block(-1,20,-17,mc::world::BlockId::Grass)) return false;
+    if(world.get_block(0,10,0)!=mc::world::BlockId::Stone) return false;
+    if(world.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
+    if(world.chunk_count()!=2) return false;
+    if(world.set_block(0,256,0,mc::world::BlockId::Dirt)) return false;
+    return mc::world::block_info(mc::world::BlockId::Stone).solid;
+}
 }
 int main(int argc,char** argv) {
     int size=256; std::uint32_t seed=1122;
     std::string output="terrain.ppm", language="en";
+    bool self_test=false;
     for(int i=1;i<argc;++i) {
         const std::string a=argv[i];
         if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,2048);
         else if(a=="--seed" && i+1<argc) seed=std::uint32_t(std::strtoul(argv[++i],nullptr,10));
         else if(a=="--output" && i+1<argc) output=argv[++i];
         else if(a=="--lang" && i+1<argc) language=argv[++i];
+        else if(a=="--self-test") self_test=true;
         else if(a=="--help") {
             std::cout<<mc::i18n::text("app.title",language)<<"\n"
                      <<mc::i18n::text("help.usage",language)<<"\n"
@@ -63,6 +77,11 @@ int main(int argc,char** argv) {
     if(!mc::i18n::is_supported(language)) {
         std::cerr<<replace_all(mc::i18n::text("language.unknown","en"),"{code}",language)<<"\n";
         language="en";
+    }
+    if(self_test) {
+        if(!run_world_self_test()) { std::cerr<<"World core test failed\n"; return 2; }
+        std::cout<<"World core test passed\n";
+        return 0;
     }
     std::vector<double> heights(std::size_t(size)*size);
     for(int z=0;z<size;++z) for(int x=0;x<size;++x) heights[std::size_t(z)*size+x]=terrain(x,z,seed);
