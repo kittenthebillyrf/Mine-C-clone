@@ -77,8 +77,7 @@ void draw_block(Texture2D* textures,mc::world::BlockId id,Vector3 center) {
             if(textures[index].id!=0) SetTextureFilter(textures[index],TEXTURE_FILTER_POINT);
         }
     }
-    if(textures[index].id!=0) DrawCubeTexture(textures[index],center,BLOCK,BLOCK,BLOCK,WHITE);
-    else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
+    DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
 int surface_y(const mc::world::World& world,int x,int z) {
@@ -155,6 +154,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
+    int menuSelection=0;
     bool optionsOpen=false;
     bool multiplayerOpen=false;
     bool requestQuit=false;
