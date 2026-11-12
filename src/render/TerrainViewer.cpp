@@ -54,6 +54,36 @@ Color color_for(mc::world::BlockId id) {
         case BlockId::Sand:return Color{210,194,139,255};
         case BlockId::Water:return Color{55,115,205,170};
         case BlockId::Bedrock:return Color{55,55,58,255};
+        case BlockId::Cobblestone:return Color{105,105,110,255};
+        case BlockId::OakPlanks:return Color{170,130,75,255};
+        case BlockId::OakLog:return Color{115,83,48,255};
+        case BlockId::OakLeaves:return Color{65,130,55,255};
+        case BlockId::Gravel:return Color{135,132,125,255};
+        case BlockId::Sandstone:return Color{210,190,125,255};
+        case BlockId::Glass:return Color{170,210,220,150};
+        case BlockId::Bricks:return Color{150,75,65,255};
+        case BlockId::Clay:return Color{155,160,165,255};
+        case BlockId::CoalOre:return Color{75,75,75,255};
+        case BlockId::IronOre:return Color{185,145,115,255};
+        case BlockId::GoldOre:return Color{225,185,45,255};
+        case BlockId::DiamondOre:return Color{65,210,195,255};
+        case BlockId::RedstoneOre:return Color{175,45,40,255};
+        case BlockId::LapisOre:return Color{45,75,170,255};
+        case BlockId::EmeraldOre:return Color{45,175,90,255};
+        case BlockId::Obsidian:return Color{45,35,65,255};
+        case BlockId::Snow:return Color{235,242,250,255};
+        case BlockId::Ice:return Color{155,205,235,190};
+        case BlockId::Cactus:return Color{55,135,55,255};
+        case BlockId::Bookshelf:return Color{155,110,65,255};
+        case BlockId::WoolWhite:return Color{230,230,225,255};
+        case BlockId::Netherrack:return Color{125,55,55,255};
+        case BlockId::Glowstone:return Color{225,180,90,255};
+        case BlockId::MossyCobblestone:return Color{90,115,85,255};
+        case BlockId::Pumpkin:return Color{205,120,30,255};
+        case BlockId::CraftingTable:return Color{145,95,55,255};
+        case BlockId::Furnace:return Color{105,105,105,255};
+        case BlockId::OakSlab:return Color{170,130,75,255};
+        case BlockId::OakFence:return Color{150,110,60,255};
         default:return BLANK;
     }
 }
@@ -91,9 +121,10 @@ Model make_block_model(mc::world::BlockId id) {
 }
 void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     const auto index=static_cast<unsigned int>(id);
-    if(index>=7) return;
-    if(id==mc::world::BlockId::Water) { DrawCube(center,BLOCK,BLOCK,BLOCK,Color{55,115,205,150}); return; }
-    if(models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
+    if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice) {
+        DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
+    }
+    if(index<7 && models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
     else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
@@ -160,8 +191,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool grounded=true;
     int selected=0;
     ItemStack inventory[INVENTORY_SIZE]{};
-    const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
-    for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
+    const BlockId startingItems[HOTBAR_SIZE]={
+        BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Cobblestone,
+        BlockId::OakPlanks,BlockId::OakLog,BlockId::Sand,BlockId::Glass,BlockId::Water
+    };
+    for(int i=0;i<HOTBAR_SIZE;++i) inventory[i]={startingItems[i],32};
     bool inventoryOpen=false;
     bool creativeOpen=false;
     bool paused=false;
