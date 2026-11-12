@@ -143,6 +143,18 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
         const Vector2 wheel=GetMouseWheelMoveV();
         if(wheel.y!=0) selected=(selected+(wheel.y>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+        if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            const Vector2 mouse=GetMousePosition();
+            for(int i=0;i<INVENTORY_SIZE;++i) {
+                const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
+                if(mouse.x>=sx&&mouse.x<sx+48&&mouse.y>=sy&&mouse.y<sy+50) {
+                    if(i<HOTBAR_SIZE) selected=i;
+                    else std::swap(inventory[selected],inventory[i]);
+                    break;
+                }
+            }
+        }
 
         Camera3D camera{};
         camera.position=Vector3{px*BLOCK,py+EYE_HEIGHT,pz*BLOCK};
