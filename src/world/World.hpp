@@ -1,6 +1,7 @@
 #pragma once
 #include "Chunk.hpp"
 #include <cstddef>
+#include <iosfwd>
 #include <unordered_map>
 
 namespace mc::world {
@@ -13,6 +14,8 @@ public:
     BlockId get_block(int world_x,int y,int world_z) const;
     bool set_block(int world_x,int y,int world_z,BlockId block);
     std::size_t chunk_count() const { return chunks_.size(); }
+    bool save(std::ostream& output) const;
+    bool load(std::istream& input);
 private:
     std::unordered_map<ChunkPos,Chunk,ChunkPosHash> chunks_;
 };
