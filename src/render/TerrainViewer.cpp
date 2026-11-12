@@ -378,7 +378,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
                    world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
-                draw_block(blockTextures,id,block_center(x,y,z));
+                draw_block(blockModels,id,block_center(x,y,z));
             }
         }
         EndMode3D();
