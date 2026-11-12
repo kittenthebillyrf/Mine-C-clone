@@ -85,8 +85,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const float groundHeight=float(c.height)*BLOCK_SIZE;
             DrawCube(Vector3{wx,groundHeight*0.5f,wz},
                      BLOCK_SIZE,groundHeight,BLOCK_SIZE,c.color);
-            DrawCubeWires(Vector3{wx,groundHeight*0.5f,wz},
-                          BLOCK_SIZE,groundHeight,BLOCK_SIZE,Fade(BLACK,0.035f));
             if(c.height<SEA_LEVEL) {
                 const float waterHeight=(SEA_LEVEL-float(c.height))*BLOCK_SIZE;
                 DrawCube(Vector3{wx,groundHeight+waterHeight*0.5f,wz},
