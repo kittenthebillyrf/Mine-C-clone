@@ -417,7 +417,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     }
     { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
     for(unsigned int i=1;i<7;++i) if(blockTextures[i].id!=0) UnloadTexture(blockTextures[i]);
-    for(unsigned int i=1;i<7;++i) if(blockTextures[i].id!=0) UnloadTexture(blockTextures[i]);
     EnableCursor();
     CloseWindow();
     return 0;
