@@ -89,6 +89,7 @@ OverworldGenerator112::OverworldGenerator112(std::int64_t seed) : seed_(seed) {
     low_=std::make_unique<OctaveNoise112>(random,16);
     high_=std::make_unique<OctaveNoise112>(random,16);
     selector_=std::make_unique<OctaveNoise112>(random,8);
+    surface_=std::make_unique<OctaveNoise112>(random,4);
     scale_=std::make_unique<OctaveNoise112>(random,10);
     depth_=std::make_unique<OctaveNoise112>(random,16);
     forest_=std::make_unique<OctaveNoise112>(random,8);
