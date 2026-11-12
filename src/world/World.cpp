@@ -1,4 +1,5 @@
 #include "World.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <istream>
 #include <ostream>
