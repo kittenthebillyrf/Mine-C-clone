@@ -56,28 +56,44 @@ Color color_for(mc::world::BlockId id) {
         default:return BLANK;
     }
 }
-const char* texture_path(mc::world::BlockId id) {
+Color texture_base(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch(id) {
-        case BlockId::Stone:return "romfs:/textures/stone.png";
-        case BlockId::Dirt:return "romfs:/textures/dirt.png";
-        case BlockId::Grass:return "romfs:/textures/grass.png";
-        case BlockId::Sand:return "romfs:/textures/sand.png";
-        case BlockId::Bedrock:return "romfs:/textures/bedrock.png";
-        default:return nullptr;
+        case BlockId::Grass:return Color{92,165,65,255};
+        case BlockId::Dirt:return Color{132,91,57,255};
+        case BlockId::Stone:return Color{128,130,136,255};
+        case BlockId::Sand:return Color{218,202,148,255};
+        case BlockId::Bedrock:return Color{58,58,62,255};
+        default:return WHITE;
     }
 }
-void draw_block(Texture2D* textures,mc::world::BlockId id,Vector3 center) {
+Model make_block_model(mc::world::BlockId id) {
+    const Color base=texture_base(id);
+    Image image=GenImageColor(16,16,base);
+    const std::uint32_t seed=static_cast<std::uint32_t>(id)*0x9e3779b9u+0x12345u;
+    for(int y=0;y<16;++y) for(int x=0;x<16;++x) {
+        const std::uint32_t h=hash2(x,y,seed);
+        const int delta=int(h%31u)-15;
+        Color pixel{static_cast<unsigned char>(std::clamp(int(base.r)+delta,0,255)),
+                    static_cast<unsigned char>(std::clamp(int(base.g)+delta,0,255)),
+                    static_cast<unsigned char>(std::clamp(int(base.b)+delta,0,255)),255};
+        if(id==mc::world::BlockId::Grass && y>11) pixel=Color{104,75,48,255};
+        if(id==mc::world::BlockId::Bedrock && (h%7u)==0u) pixel=Color{30,30,34,255};
+        ImageDrawPixel(&image,x,y,pixel);
+    }
+    Texture2D texture=LoadTextureFromImage(image);
+    UnloadImage(image);
+    if(texture.id!=0) SetTextureFilter(texture,TEXTURE_FILTER_POINT);
+    Model model=LoadModelFromMesh(GenMeshCube(BLOCK,BLOCK,BLOCK));
+    if(model.materialCount>0 && texture.id!=0) model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
+    return model;
+}
+void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     const auto index=static_cast<unsigned int>(id);
     if(index>=7) return;
-    if(textures[index].id==0) {
-        const char* path=texture_path(id);
-        if(path && FileExists(path)) {
-            textures[index]=LoadTexture(path);
-            if(textures[index].id!=0) SetTextureFilter(textures[index],TEXTURE_FILTER_POINT);
-        }
-    }
-    DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
+    if(id==mc::world::BlockId::Water) { DrawCube(center,BLOCK,BLOCK,BLOCK,Color{55,115,205,150}); return; }
+    if(models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
+    else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
 int surface_y(const mc::world::World& world,int x,int z) {
@@ -139,7 +155,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(120);
     DisableCursor();
-    Texture2D blockTextures[7]{};
+    Model blockModels[7]{};
+    const BlockId texturedBlocks[5]={BlockId::Stone,BlockId::Dirt,BlockId::Grass,BlockId::Sand,BlockId::Bedrock};
+    for(const BlockId id:texturedBlocks) blockModels[static_cast<unsigned int>(id)]=make_block_model(id);
     float px=float(size)*0.5f,pz=float(size)*0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
     float vy=0.0f,yaw=0.0f,pitch=-0.18f;
@@ -178,7 +196,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     for(int y=std::max(0,top-5);y<top;++y) {
                         const BlockId id=world.get_block(x,y,z);
                         if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air))
-                            draw_block(blockTextures,id,block_center(x,y,z));
+                            draw_block(blockModels,id,block_center(x,y,z));
                     }
                 }
             }
@@ -416,7 +434,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndDrawing();
     }
     { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
-    for(unsigned int i=1;i<7;++i) if(blockTextures[i].id!=0) UnloadTexture(blockTextures[i]);
+    for(unsigned int i=1;i<7;++i) if(blockModels[i].meshCount>0) UnloadModel(blockModels[i]);
     EnableCursor();
     CloseWindow();
     return 0;
