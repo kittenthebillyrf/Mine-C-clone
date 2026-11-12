@@ -43,11 +43,22 @@ private:
 // First portable Overworld terrain pass. Noise/RNG primitives mirror the
 // 1.12.2 implementation; biome surface replacement, caves, structures and
 // decoration are separate generation stages.
+struct BiomeTerrain112 {
+    float base_height=0.125f;
+    float height_variation=0.05f;
+};
+struct DensityMap112 {
+    std::array<double,5*5*33> values{};
+    double at(int x,int z,int y) const { return values[(x*5+z)*33+y]; }
+};
+
 class OverworldGenerator112 {
 public:
     explicit OverworldGenerator112(std::int64_t seed);
     void generate_chunk(World& world,int chunk_x,int chunk_z) const;
     int terrain_height(int world_x,int world_z) const;
+    DensityMap112 generate_density_map(int chunk_x,int chunk_z,
+        const std::array<BiomeTerrain112,100>& biome_grid) const;
 private:
     std::int64_t seed_;
     std::unique_ptr<OctaveNoise112> low_;
