@@ -1,16 +1,19 @@
 #include "TerrainViewer.hpp"
-
 #include "raylib.h"
+#include "raymath.h"
+#include "../world/World.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <vector>
+#include <string>
 
 namespace mc::render {
 namespace {
-constexpr float BLOCK_SIZE=2.0f;
-constexpr float SEA_LEVEL=52.0f;
+constexpr float BLOCK=2.0f;
+constexpr float PLAYER_HEIGHT=3.6f;
+constexpr float EYE_HEIGHT=3.15f;
+constexpr float REACH=7.0f;
 std::uint32_t hash2(int x,int z,std::uint32_t seed) {
     std::uint32_t h=seed^(std::uint32_t(x)*0x8da6b343u)^(std::uint32_t(z)*0xd8163841u);
     h^=h>>13; h*=0x85ebca6bu; h^=h>>16; h*=0xc2b2ae35u; h^=h>>16;
@@ -22,86 +25,157 @@ float lattice(int x,int z,std::uint32_t seed) {
     return (float(hash2(x,z,seed))/float(UINT32_MAX))*2.0f-1.0f;
 }
 float noise(float x,float z,std::uint32_t seed) {
-    const int ix=int(std::floor(x)), iz=int(std::floor(z));
-    const float fx=fade(x-float(ix)), fz=fade(z-float(iz));
+    const int ix=int(std::floor(x)),iz=int(std::floor(z));
+    const float fx=fade(x-float(ix)),fz=fade(z-float(iz));
     return lerp(lerp(lattice(ix,iz,seed),lattice(ix+1,iz,seed),fx),
                   lerp(lattice(ix,iz+1,seed),lattice(ix+1,iz+1,seed),fx),fz);
 }
 float fbm(float x,float z,std::uint32_t seed,int octaves,float frequency) {
-    float value=0.0f,amplitude=1.0f,total=0.0f;
-    for(int i=0;i<octaves;++i) {
-        value+=noise(x*frequency,z*frequency,seed+std::uint32_t(i)*1013u)*amplitude;
-        total+=amplitude; amplitude*=0.5f; frequency*=2.0f;
+    float v=0,a=1,total=0;
+    for(int i=0;i<octaves;++i) { v+=noise(x*frequency,z*frequency,seed+std::uint32_t(i)*1013u)*a; total+=a; a*=0.5f; frequency*=2.0f; }
+    return v/total;
+}
+int height_at(int x,int z,std::uint32_t seed) {
+    const float broad=fbm(float(x),float(z),seed^0x9e3779b9u,4,0.035f);
+    const float detail=fbm(float(x),float(z),seed,4,0.12f);
+    return std::clamp(int(13.0f+broad*5.0f+detail*2.5f),5,23);
+}
+Color color_for(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    switch(id) {
+        case BlockId::Grass:return Color{82,160,65,255};
+        case BlockId::Dirt:return Color{128,87,55,255};
+        case BlockId::Stone:return Color{125,127,132,255};
+        case BlockId::Sand:return Color{210,194,139,255};
+        case BlockId::Water:return Color{55,115,205,170};
+        case BlockId::Bedrock:return Color{55,55,58,255};
+        default:return BLANK;
     }
-    return value/total;
 }
-int terrain_height(int x,int z,std::uint32_t seed) {
-    const float continent=fbm(float(x),float(z),seed^0x9e3779b9u,4,0.0035f);
-    const float hills=fbm(float(x),float(z),seed,5,0.018f);
-    const float ridges=1.0f-std::abs(fbm(float(x),float(z),seed^0x68bc21ebu,3,0.009f));
-    const float height=48.0f+continent*18.0f+hills*17.0f+std::pow(ridges,3.0f)*13.0f;
-    return std::clamp(int(std::round(height)),5,105);
+Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
+bool ray_block(Ray ray,mc::world::World& world,Vector3& hit,Vector3& previous) {
+    Vector3 p=ray.position;
+    const Vector3 step=Vector3Scale(Vector3Normalize(ray.direction),0.08f);
+    int lastX=0,lastY=0,lastZ=0;
+    for(float d=0;d<REACH;d+=0.08f) {
+        const int x=int(std::floor(p.x/BLOCK)),y=int(std::floor(p.y/BLOCK)),z=int(std::floor(p.z/BLOCK));
+        const auto id=world.get_block(x,y,z);
+        if(id!=mc::world::BlockId::Air && id!=mc::world::BlockId::Water) {
+            hit=Vector3{float(x),float(y),float(z)};
+            previous=Vector3{float(lastX),float(lastY),float(lastZ)};
+            return true;
+        }
+        lastX=x; lastY=y; lastZ=z; p=Vector3Add(p,step);
+    }
+    return false;
 }
-Color surface_color(int h,int x,int z,std::uint32_t seed) {
-    const float temperature=fbm(float(x),float(z),seed^0x1234abcdu,2,0.006f);
-    const float moisture=fbm(float(x),float(z),seed^0x76543210u,2,0.008f);
-    if(h<SEA_LEVEL+2) return Color{194,178,128,255}; // sand
-    if(h>83) return Color{125,125,130,255};          // stone peaks
-    if(temperature>0.35f && moisture< -0.05f) return Color{190,166,105,255}; // dry biome
-    if(temperature< -0.30f) return Color{105,145,100,255}; // cold biome
-    return Color{65,145,62,255};                     // grass
-}
-struct Column { int height; Color color; bool tree; };
 }
 int run_terrain_viewer(int map_size,std::uint32_t seed) {
-    const int size=std::clamp(map_size,64,192);
-    std::vector<Column> columns(std::size_t(size)*size);
+    using namespace mc::world;
+    const int size=std::clamp(map_size,32,96);
+    World world;
     for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
-        const int h=terrain_height(x,z,seed);
-        const float forest=fbm(float(x),float(z),seed^0xabcdef01u,2,0.035f);
-        const bool tree=(h>SEA_LEVEL+3 && h<78 && forest>0.38f &&
-                         (hash2(x,z,seed^0x55aa55aau)%100u)<9u);
-        columns[std::size_t(z)*size+x]={h,surface_color(h,x,z,seed),tree};
+        const int h=height_at(x,z,seed);
+        const bool sandy=h<=11;
+        for(int y=0;y<h;++y) {
+            BlockId id=(y==0)?BlockId::Bedrock:(y<h-4?BlockId::Stone:(y<h-1?BlockId::Dirt:(sandy?BlockId::Sand:BlockId::Grass)));
+            world.set_block(x,y,z,id);
+        }
+        if(h<10) for(int y=h;y<11;++y) world.set_block(x,y,z,BlockId::Water);
     }
 
-    InitWindow(1280,720,"Mine C++ Clone - voxel terrain");
-    SetTargetFPS(60);
-    Camera3D camera{};
-    camera.position=Vector3{float(size)*BLOCK_SIZE*0.5f,145.0f,float(size)*BLOCK_SIZE*0.85f};
-    camera.target=Vector3{float(size)*BLOCK_SIZE*0.5f,35.0f,float(size)*BLOCK_SIZE*0.5f};
-    camera.up=Vector3{0.0f,1.0f,0.0f};
-    camera.fovy=65.0f;
-    camera.projection=CAMERA_PERSPECTIVE;
+    InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
+    SetTargetFPS(120);
     DisableCursor();
-
+    float px=float(size)*0.5f,pz=float(size)*0.5f;
+    float py=float(height_at(int(px),int(pz)))*BLOCK;
+    float vy=0.0f,yaw=0.0f,pitch=-0.18f;
+    bool grounded=true;
+    int selected=0;
+    const BlockId hotbar[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
+    const char* labels[5]={"GRASS","DIRT","STONE","SAND","WATER"};
+    bool captured=true;
     while(!WindowShouldClose()) {
-        UpdateCamera(&camera,CAMERA_FIRST_PERSON);
+        const float dt=std::min(GetFrameTime(),0.04f);
+        if(IsKeyPressed(KEY_ESCAPE)) { captured=!captured; if(captured) DisableCursor(); else EnableCursor(); }
+        if(captured) {
+            const Vector2 md=GetMouseDelta();
+            yaw-=md.x*0.0025f;
+            pitch=std::clamp(pitch-md.y*0.0025f,-1.45f,1.45f);
+        }
+        const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
+        const float rightX=std::cos(yaw),rightZ=std::sin(yaw);
+        float mx=0,mz=0;
+        if(IsKeyDown(KEY_W)) { mx+=forwardX; mz+=forwardZ; }
+        if(IsKeyDown(KEY_S)) { mx-=forwardX; mz-=forwardZ; }
+        if(IsKeyDown(KEY_D)) { mx+=rightX; mz+=rightZ; }
+        if(IsKeyDown(KEY_A)) { mx-=rightX; mz-=rightZ; }
+        const float len=std::sqrt(mx*mx+mz*mz);
+        if(len>0) { mx/=len; mz/=len; }
+        const float speed=IsKeyDown(KEY_LEFT_SHIFT)?10.0f:6.0f;
+        const float nx=std::clamp(px+mx*speed*dt,1.0f,float(size-2));
+        const float nz=std::clamp(pz+mz*speed*dt,1.0f,float(size-2));
+        const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
+        const float ground=float(height_at(groundX,groundZ,seed))*BLOCK;
+        if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
+        if(IsKeyPressed(KEY_SPACE)&&grounded) { vy=10.5f; grounded=false; }
+        vy-=25.0f*dt; py+=vy*dt;
+        const float floorY=float(height_at(int(px),int(pz),seed))*BLOCK;
+        if(py<=floorY) { py=floorY; vy=0; grounded=true; }
+
+        for(int i=0;i<5;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
+        const Vector2 wheel=GetMouseWheelMoveV();
+        if(wheel.y!=0) selected=(selected+(wheel.y>0?4:1))%5;
+
+        Camera3D camera{};
+        camera.position=Vector3{px*BLOCK,py+EYE_HEIGHT,pz*BLOCK};
+        const Vector3 direction=Vector3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),-std::cos(yaw)*std::cos(pitch)};
+        camera.target=Vector3Add(camera.position,Vector3Scale(direction,1.0f));
+        camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
+
+        Vector3 hit{},previous{};
+        const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
+        if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) world.set_block(int(hit.x),int(hit.y),int(hit.z),BlockId::Air);
+        if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+            const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
+            if(by>=1&&by<Chunk::Height) {
+                const float cx=(float(bx)+0.5f)*BLOCK,cz=(float(bz)+0.5f)*BLOCK;
+                const bool overlaps=std::abs(cx-px*BLOCK)<1.0f&&std::abs(cz-pz*BLOCK)<1.0f&&float(by+1)*BLOCK>py&&float(by)*BLOCK<py+PLAYER_HEIGHT;
+                if(!overlaps) world.set_block(bx,by,bz,hotbar[selected]);
+            }
+        }
+
         BeginDrawing();
         ClearBackground(Color{135,190,235,255});
         BeginMode3D(camera);
-        for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
-            const Column& c=columns[std::size_t(z)*size+x];
-            const float wx=float(x)*BLOCK_SIZE, wz=float(z)*BLOCK_SIZE;
-            const float groundHeight=float(c.height)*BLOCK_SIZE;
-            DrawCube(Vector3{wx,groundHeight*0.5f,wz},
-                     BLOCK_SIZE,groundHeight,BLOCK_SIZE,c.color);
-            if(c.height<SEA_LEVEL) {
-                const float waterHeight=(SEA_LEVEL-float(c.height))*BLOCK_SIZE;
-                DrawCube(Vector3{wx,groundHeight+waterHeight*0.5f,wz},
-                         BLOCK_SIZE,waterHeight,BLOCK_SIZE,Color{45,105,190,170});
-            }
-            if(c.tree) {
-                const float top=groundHeight;
-                DrawCube(Vector3{wx,top+5.0f,wz},0.9f,10.0f,0.9f,Color{105,73,43,255});
-                DrawCube(Vector3{wx,top+12.0f,wz},5.2f,6.0f,5.2f,Color{42,115,48,255});
-                DrawCube(Vector3{wx,top+15.0f,wz},3.4f,4.0f,3.4f,Color{50,130,54,255});
+        const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
+        const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
+        for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
+            for(int y=0;y<Chunk::Height;++y) {
+                const BlockId id=world.get_block(x,y,z);
+                if(id==BlockId::Air) continue;
+                if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
+                   world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
+                   world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
+                DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
             }
         }
         EndMode3D();
-        DrawRectangle(12,12,520,92,Fade(BLACK,0.62f));
-        DrawText("MINE C++ CLONE - BLOCK TERRAIN",24,22,20,RAYWHITE);
-        DrawText("Large blocks: 2x2x2 | WASD: move | Mouse: look | ESC: exit",24,50,16,RAYWHITE);
-        DrawText(TextFormat("World: %i x %i | Seed: %u | Water level: %.0f",size,size,seed,SEA_LEVEL),24,75,15,RAYWHITE);
+        DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
+        DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
+        DrawText("WASD move  SPACE jump  SHIFT run  LMB break  RMB place  1-5 / wheel select  ESC cursor",14,GetScreenHeight()-28,15,RAYWHITE);
+        DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
+        DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
+        const int barW=60,barX=GetScreenWidth()/2-(barW*5)/2,barY=GetScreenHeight()-100;
+        for(int i=0;i<5;++i) {
+            DrawRectangle(barX+i*barW,barY,56,56,Fade(BLACK,0.65f));
+            DrawRectangleLines(barX+i*barW,barY,56,56,i==selected?YELLOW:GRAY);
+            DrawRectangle(barX+i*barW+14,barY+14,28,28,color_for(hotbar[i]));
+            DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,12,RAYWHITE);
+        }
+        DrawText(labels[selected],barX+5*barW+12,barY+18,16,RAYWHITE);
+        DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py/BLOCK,pz),14,48,16,RAYWHITE);
+        if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
         DrawFPS(GetScreenWidth()-90,12);
         EndDrawing();
     }
