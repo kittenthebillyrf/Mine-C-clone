@@ -192,13 +192,16 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(requestQuit) break;
             continue;
         }
-        if(IsKeyPressed(KEY_ESCAPE)) { captured=!captured; inventoryOpen=false; if(captured) DisableCursor(); else EnableCursor(); }
-        if(IsKeyPressed(KEY_E)) {
+        const bool gamepad=IsGamepadAvailable(0);
+        if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
+            captured=!captured; inventoryOpen=false;
+            if(captured) DisableCursor(); else EnableCursor();
+        }
+        if(IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_LEFT))) {
             inventoryOpen=!inventoryOpen;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        const bool gamepad=IsGamepadAvailable(0);
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw-=md.x*0.0025f;
@@ -225,7 +228,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         const float len=std::sqrt(mx*mx+mz*mz);
         if(len>0) { mx/=len; mz/=len; }
-        const float speed=IsKeyDown(KEY_LEFT_SHIFT)?10.0f:6.0f;
+        const bool sprinting=IsKeyDown(KEY_LEFT_SHIFT)||(gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB));
+        const float speed=sprinting?10.0f:6.0f;
         const float nx=std::clamp(px+mx*speed*dt,1.0f,float(size-2));
         const float nz=std::clamp(pz+mz*speed*dt,1.0f,float(size-2));
         const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
