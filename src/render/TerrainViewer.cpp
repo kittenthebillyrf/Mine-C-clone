@@ -125,6 +125,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
     for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
     bool inventoryOpen=false;
+    bool craftingOpen=false;
+    bool paused=false;
+    bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
     bool optionsOpen=false;
@@ -194,13 +197,23 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         const bool gamepad=IsGamepadAvailable(0);
         if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
-            captured=!captured; inventoryOpen=false;
+            paused=!paused;
+            inventoryOpen=false; craftingOpen=false;
+            captured=!paused;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        if(IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_LEFT))) {
-            inventoryOpen=!inventoryOpen;
+        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_UP)))) {
+            inventoryOpen=!inventoryOpen; craftingOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
+        }
+        if(!paused && (IsKeyPressed(KEY_C)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_LEFT)))) {
+            craftingOpen=!craftingOpen; inventoryOpen=false;
+            captured=!craftingOpen;
+            if(captured) DisableCursor(); else EnableCursor();
+        }
+        if(!paused && (IsKeyPressed(KEY_F5)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_THUMB)))) {
+            thirdPerson=!thirdPerson;
         }
         if(captured) {
             const Vector2 md=GetMouseDelta();
@@ -228,8 +241,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         const float len=std::sqrt(mx*mx+mz*mz);
         if(len>0) { mx/=len; mz/=len; }
-        const bool sprinting=IsKeyDown(KEY_LEFT_SHIFT)||(gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB));
-        const float speed=sprinting?10.0f:6.0f;
+        const bool crouching=IsKeyDown(KEY_LEFT_SHIFT);
+        const float speed=crouching?2.5f:6.0f;
         const float nx=std::clamp(px+mx*speed*dt,1.0f,float(size-2));
         const float nz=std::clamp(pz+mz*speed*dt,1.0f,float(size-2));
         const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
@@ -266,14 +279,20 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
 
         Camera3D camera{};
-        camera.position=Vector3{px*BLOCK,py+EYE_HEIGHT,pz*BLOCK};
-        const Vector3 direction=Vector3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),-std::cos(yaw)*std::cos(pitch)};
-        camera.target=Vector3Add(camera.position,Vector3Scale(direction,1.0f));
+        const float eyeHeight=crouching?2.25f:EYE_HEIGHT;
+        const Vector3 lookDirection=Vector3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),-std::cos(yaw)*std::cos(pitch)};
+        if(thirdPerson) {
+            camera.position=Vector3{px*BLOCK-lookDirection.x*8.0f,py+eyeHeight+lookDirection.y*2.0f-lookDirection.y*8.0f,pz*BLOCK-lookDirection.z*8.0f};
+            camera.target=Vector3{px*BLOCK,py+eyeHeight,pz*BLOCK};
+        } else {
+            camera.position=Vector3{px*BLOCK,py+eyeHeight,pz*BLOCK};
+            camera.target=Vector3Add(camera.position,Vector3Scale(lookDirection,1.0f));
+        }
         camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&!craftingOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
@@ -281,7 +300,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
-        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&!craftingOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
@@ -323,11 +342,26 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,11,RAYWHITE);
             if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
+        if(craftingOpen) {
+            const int panelW=620,panelH=360,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            DrawRectangle(panelX,panelY,panelW,panelH,Fade(Color{38,38,42,255},0.97f));
+            DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
+            DrawText("CRAFTING",panelX+22,panelY+18,26,RAYWHITE);
+            DrawText("Recipe book",panelX+24,panelY+68,20,YELLOW);
+            DrawText("No craftable recipes yet.",panelX+24,panelY+112,19,RAYWHITE);
+            DrawText("The recipe system and console-style recipe selection are next.",panelX+24,panelY+148,16,LIGHTGRAY);
+            DrawText("C / Square: close",panelX+24,panelY+310,16,RAYWHITE);
+        }
+        if(paused) {
+            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.68f));
+            DrawText("PAUSED",GetScreenWidth()/2-75,GetScreenHeight()/2-75,36,RAYWHITE);
+            DrawText("Press + / START / ESC to resume",GetScreenWidth()/2-180,GetScreenHeight()/2-18,20,RAYWHITE);
+        }
         if(inventoryOpen) {
             const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             DrawRectangle(panelX,panelY,panelW,panelH,Fade(DARKGRAY,0.96f));
             DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
-            DrawText("INVENTORY - E to close",panelX+18,panelY+14,22,RAYWHITE);
+            DrawText("INVENTORY - E / Triangle to close",panelX+18,panelY+14,22,RAYWHITE);
             for(int i=0;i<INVENTORY_SIZE;++i) {
                 const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
                 DrawRectangle(sx,sy,48,50,Fade(BLACK,0.7f));
