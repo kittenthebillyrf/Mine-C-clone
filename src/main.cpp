@@ -1,3 +1,5 @@
+#include "i18n/Localization.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -33,20 +35,39 @@ double terrain(int x,int z,std::uint32_t seed) {
     const double continental=noise(x*0.003,z*0.003,seed^0x9e3779b9u);
     return std::clamp(62.0 + (n/total)*25.0 + continental*13.0, 4.0, 120.0);
 }
+std::string replace_all(std::string value, const std::string& token, const std::string& replacement) {
+    std::size_t pos=0;
+    while((pos=value.find(token,pos))!=std::string::npos) {
+        value.replace(pos,token.size(),replacement);
+        pos += replacement.size();
+    }
+    return value;
+}
 }
 int main(int argc,char** argv) {
-    int size=256; std::uint32_t seed=1122; std::string output="terrain.ppm";
+    int size=256; std::uint32_t seed=1122;
+    std::string output="terrain.ppm", language="en";
     for(int i=1;i<argc;++i) {
         const std::string a=argv[i];
         if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,2048);
         else if(a=="--seed" && i+1<argc) seed=std::uint32_t(std::strtoul(argv[++i],nullptr,10));
         else if(a=="--output" && i+1<argc) output=argv[++i];
-        else if(a=="--help") { std::cout<<"Mine C++ Clone terrain prototype\n--size N --seed N --output file.ppm\n"; return 0; }
+        else if(a=="--lang" && i+1<argc) language=argv[++i];
+        else if(a=="--help") {
+            std::cout<<mc::i18n::text("app.title",language)<<"\n"
+                     <<mc::i18n::text("help.usage",language)<<"\n"
+                     <<mc::i18n::text("help.languages",language)<<"\n";
+            return 0;
+        }
+    }
+    if(!mc::i18n::is_supported(language)) {
+        std::cerr<<replace_all(mc::i18n::text("language.unknown","en"),"{code}",language)<<"\n";
+        language="en";
     }
     std::vector<double> heights(std::size_t(size)*size);
     for(int z=0;z<size;++z) for(int x=0;x<size;++x) heights[std::size_t(z)*size+x]=terrain(x,z,seed);
     std::ofstream out(output,std::ios::binary);
-    if(!out) { std::cerr<<"Cannot write "<<output<<"\n"; return 1; }
+    if(!out) { std::cerr<<mc::i18n::text("error.output",language)<<output<<"\n"; return 1; }
     out<<"P6\n"<<size<<" "<<size<<"\n255\n";
     for(double h:heights) {
         unsigned char rgb[3];
@@ -56,6 +77,10 @@ int main(int argc,char** argv) {
         else { rgb[0]=135; rgb[1]=135; rgb[2]=140; }
         out.write(reinterpret_cast<char*>(rgb),3);
     }
-    std::cout<<"Generated "<<size<<"x"<<size<<" terrain, seed "<<seed<<" -> "<<output<<"\n";
+    std::string message=mc::i18n::text("terrain.generated",language);
+    message=replace_all(message,"{size}",std::to_string(size));
+    message=replace_all(message,"{seed}",std::to_string(seed));
+    message=replace_all(message,"{output}",output);
+    std::cout<<message<<"\n";
     return out ? 0 : 1;
 }
