@@ -117,7 +117,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     SetTargetFPS(120);
     DisableCursor();
     float px=float(size)*0.5f,pz=float(size)*0.5f;
-    float py=float(height_at(int(px),int(pz),seed))*BLOCK;
+    float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
     float vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
     int selected=0;
