@@ -12,7 +12,12 @@ BlockId Chunk::get(int x,int y,int z) const {
 }
 bool Chunk::set(int x,int y,int z,BlockId block) {
     if(x<0||x>=Width||y<0||y>=Height||z<0||z>=Depth) return false;
-    blocks_[index(x,y,z)]=block;
+    const auto i=index(x,y,z);
+    if(blocks_[i]!=block) {
+        blocks_[i]=block;
+        if(block==BlockId::Air) states_.erase(i);
+        ++revision_;
+    }
     return true;
 }
 std::size_t Chunk::count(BlockId block) const {
