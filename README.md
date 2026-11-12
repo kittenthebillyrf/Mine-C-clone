@@ -33,7 +33,7 @@ Launch:
 - Six language catalogs: English, Russian, Spanish, German, French and Simplified Chinese.
 - Windows x64 GitHub Actions build and CTest workflow.
 
-## Build and test
+## Export a map image (optional)\n\nThe PPM terrain image is no longer the default launch mode. To create one explicitly, run:\n\n```powershell\n.\\build\\Release\\MineCppClone.exe --map --size 128 --seed 1122 --output terrain.ppm\n```\n\n## Build and test
 Requires Visual Studio 2022 Build Tools with C++ workload and CMake. CMake fetches raylib 5.5 during configuration.
 
 ```powershell
