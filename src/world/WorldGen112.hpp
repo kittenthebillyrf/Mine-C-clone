@@ -33,6 +33,9 @@ class OctaveNoise112 {
 public:
     OctaveNoise112(JavaRandom& random,int octaves);
     double sample(double x,double y,double z) const;
+    // Java 1.12.2 generateNoiseOctaves layout: X, Z, then Y.
+    std::vector<double> generate_region(int x_offset,int y_offset,int z_offset,
+        int x_size,int y_size,int z_size,double x_scale,double y_scale,double z_scale) const;
 private:
     std::vector<ImprovedNoise112> octaves_;
 };
