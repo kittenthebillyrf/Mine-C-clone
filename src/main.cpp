@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,14 @@ bool run_world_self_test() {
     if(world.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
     if(world.chunk_count()!=2) return false;
     if(world.set_block(0,256,0,mc::world::BlockId::Dirt)) return false;
+    std::stringstream saved(std::ios::in|std::ios::out|std::ios::binary);
+    if(!world.save(saved)) return false;
+    mc::world::World restored;
+    saved.seekg(0);
+    if(!restored.load(saved)) return false;
+    if(restored.chunk_count()!=2 ||
+       restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
+       restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
 }
 }
