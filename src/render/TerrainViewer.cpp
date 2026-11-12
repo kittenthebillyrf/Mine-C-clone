@@ -14,6 +14,9 @@ constexpr float BLOCK=2.0f;
 constexpr float PLAYER_HEIGHT=3.6f;
 constexpr float EYE_HEIGHT=3.15f;
 constexpr float REACH=7.0f;
+constexpr int HOTBAR_SIZE=9;
+constexpr int INVENTORY_SIZE=36;
+struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
 std::uint32_t hash2(int x,int z,std::uint32_t seed) {
     std::uint32_t h=seed^(std::uint32_t(x)*0x8da6b343u)^(std::uint32_t(z)*0xd8163841u);
     h^=h>>13; h*=0x85ebca6bu; h^=h>>16; h*=0xc2b2ae35u; h^=h>>16;
@@ -53,6 +56,13 @@ Color color_for(mc::world::BlockId id) {
     }
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
+int surface_y(const mc::world::World& world,int x,int z) {
+    for(int y=mc::world::Chunk::Height-1;y>=0;--y) {
+        const auto id=world.get_block(x,y,z);
+        if(id!=mc::world::BlockId::Air&&id!=mc::world::BlockId::Water) return y+1;
+    }
+    return 1;
+}
 bool ray_block(Ray ray,mc::world::World& world,Vector3& hit,Vector3& previous) {
     Vector3 p=ray.position;
     const Vector3 step=Vector3Scale(Vector3Normalize(ray.direction),0.08f);
@@ -92,12 +102,19 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     float vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
     int selected=0;
-    const BlockId hotbar[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
-    const char* labels[5]={"GRASS","DIRT","STONE","SAND","WATER"};
+    ItemStack inventory[INVENTORY_SIZE]{};
+    const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
+    for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
+    bool inventoryOpen=false;
     bool captured=true;
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
-        if(IsKeyPressed(KEY_ESCAPE)) { captured=!captured; if(captured) DisableCursor(); else EnableCursor(); }
+        if(IsKeyPressed(KEY_ESCAPE)) { captured=!captured; inventoryOpen=false; if(captured) DisableCursor(); else EnableCursor(); }
+        if(IsKeyPressed(KEY_E)) {
+            inventoryOpen=!inventoryOpen;
+            captured=!inventoryOpen;
+            if(captured) DisableCursor(); else EnableCursor();
+        }
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw-=md.x*0.0025f;
@@ -116,16 +133,16 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float nx=std::clamp(px+mx*speed*dt,1.0f,float(size-2));
         const float nz=std::clamp(pz+mz*speed*dt,1.0f,float(size-2));
         const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
-        const float ground=float(height_at(groundX,groundZ,seed))*BLOCK;
+        const float ground=float(surface_y(world,groundX,groundZ))*BLOCK;
         if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
         if(IsKeyPressed(KEY_SPACE)&&grounded) { vy=10.5f; grounded=false; }
         vy-=25.0f*dt; py+=vy*dt;
-        const float floorY=float(height_at(int(px),int(pz),seed))*BLOCK;
+        const float floorY=float(surface_y(world,int(px),int(pz)))*BLOCK;
         if(py<=floorY) { py=floorY; vy=0; grounded=true; }
 
-        for(int i=0;i<5;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
+        for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
         const Vector2 wheel=GetMouseWheelMoveV();
-        if(wheel.y!=0) selected=(selected+(wheel.y>0?4:1))%5;
+        if(wheel.y!=0) selected=(selected+(wheel.y>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
 
         Camera3D camera{};
         camera.position=Vector3{px*BLOCK,py+EYE_HEIGHT,pz*BLOCK};
@@ -135,13 +152,24 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) world.set_block(int(hit.x),int(hit.y),int(hit.z),BlockId::Air);
+        if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
+            const BlockId broken=world.get_block(bx,by,bz);
+            if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
+                for(int i=0;i<INVENTORY_SIZE;++i) {
+                    if(inventory[i].id==broken&&inventory[i].count<64) { ++inventory[i].count; break; }
+                    if(inventory[i].count==0) { inventory[i]={broken,1}; break; }
+                }
+                world.set_block(bx,by,bz,BlockId::Air);
+            }
+        }
         if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
-            if(by>=1&&by<Chunk::Height) {
+            ItemStack& stack=inventory[selected];
+            if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
                 const float cx=(float(bx)+0.5f)*BLOCK,cz=(float(bz)+0.5f)*BLOCK;
                 const bool overlaps=std::abs(cx-px*BLOCK)<1.0f&&std::abs(cz-pz*BLOCK)<1.0f&&float(by+1)*BLOCK>py&&float(by)*BLOCK<py+PLAYER_HEIGHT;
-                if(!overlaps) world.set_block(bx,by,bz,hotbar[selected]);
+                if(!overlaps&&world.set_block(bx,by,bz,stack.id)) --stack.count;
             }
         }
 
@@ -163,17 +191,34 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
-        DrawText("WASD move  SPACE jump  SHIFT run  LMB break  RMB place  1-5 / wheel select  ESC cursor",14,GetScreenHeight()-28,15,RAYWHITE);
+        DrawText("WASD move | SPACE jump | SHIFT run | LMB break | RMB place | E inventory | 1-9 select",14,GetScreenHeight()-28,15,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
-        const int barW=60,barX=GetScreenWidth()/2-(barW*5)/2,barY=GetScreenHeight()-100;
-        for(int i=0;i<5;++i) {
-            DrawRectangle(barX+i*barW,barY,56,56,Fade(BLACK,0.65f));
-            DrawRectangleLines(barX+i*barW,barY,56,56,i==selected?YELLOW:GRAY);
-            DrawRectangle(barX+i*barW+14,barY+14,28,28,color_for(hotbar[i]));
-            DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,12,RAYWHITE);
+        const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
+        for(int i=0;i<HOTBAR_SIZE;++i) {
+            const ItemStack& stack=inventory[i];
+            DrawRectangle(barX+i*barW,barY,48,56,Fade(BLACK,0.72f));
+            DrawRectangleLines(barX+i*barW,barY,48,56,i==selected?YELLOW:GRAY);
+            if(stack.count>0) DrawRectangle(barX+i*barW+10,barY+13,28,28,color_for(stack.id));
+            DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,11,RAYWHITE);
+            if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
-        DrawText(labels[selected],barX+5*barW+12,barY+18,16,RAYWHITE);
+        if(inventoryOpen) {
+            const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            DrawRectangle(panelX,panelY,panelW,panelH,Fade(DARKGRAY,0.96f));
+            DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
+            DrawText("INVENTORY - E to close",panelX+18,panelY+14,22,RAYWHITE);
+            for(int i=0;i<INVENTORY_SIZE;++i) {
+                const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
+                DrawRectangle(sx,sy,48,50,Fade(BLACK,0.7f));
+                DrawRectangleLines(sx,sy,48,50,i==selected?YELLOW:GRAY);
+                if(inventory[i].count>0) {
+                    DrawRectangle(sx+10,sy+8,28,28,color_for(inventory[i].id));
+                    DrawText(TextFormat("%i",inventory[i].count),sx+27,sy+34,12,RAYWHITE);
+                }
+            }
+            DrawText("Hotbar: keys 1-9 | Place uses one item | Breaking adds one item",panelX+18,panelY+286,14,RAYWHITE);
+        }
         DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py/BLOCK,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
         DrawFPS(GetScreenWidth()-90,12);
