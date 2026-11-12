@@ -1,5 +1,6 @@
 #include "i18n/Localization.hpp"
 #include "world/World.hpp"
+#include "world/WorldGen112.hpp"
 #include "render/TerrainViewer.hpp"
 
 #include <algorithm>
@@ -47,6 +48,11 @@ std::string replace_all(std::string value, const std::string& token, const std::
     return value;
 }
 bool run_world_self_test() {
+    // java.util.Random reference values for seed 0.
+    mc::world::JavaRandom javaRandom(0);
+    if(std::abs(javaRandom.next_double()-0.730967787376657) > 1e-15) return false;
+    mc::world::JavaRandom boundedRandom(0);
+    if(boundedRandom.next_int(100)!=60) return false;
     mc::world::World world;
     if(world.get_block(0,10,0)!=mc::world::BlockId::Air) return false;
     if(!world.set_block(0,10,0,mc::world::BlockId::Stone)) return false;
