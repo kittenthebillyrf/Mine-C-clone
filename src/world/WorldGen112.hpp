@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <vector>
+#include <memory>
 
 namespace mc::world {
 
@@ -46,9 +47,9 @@ public:
     int terrain_height(int world_x,int world_z) const;
 private:
     std::int64_t seed_;
-    OctaveNoise112 low_;
-    OctaveNoise112 high_;
-    OctaveNoise112 selector_;
-    OctaveNoise112 detail_;
+    std::unique_ptr<OctaveNoise112> low_;
+    std::unique_ptr<OctaveNoise112> high_;
+    std::unique_ptr<OctaveNoise112> selector_;
+    std::unique_ptr<OctaveNoise112> detail_;
 };
 }
