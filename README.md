@@ -8,6 +8,10 @@ PC-first C++20 voxel sandbox prototype inspired by Minecraft Java 1.12.2. This i
 .\build\Release\MineCppClone.exe --3d --size 64 --seed 1122
 ```
 
+## Main menu
+
+The game opens on a Java 1.12-era inspired main menu with a slowly rotating 3D voxel panorama, centered title, and gray buttons that darken on hover. Singleplayer enters the world; Multiplayer is marked as a future feature; Options currently contains a placeholder panel; Quit Game closes the application.
+
 ## Controls
 
 - WASD — move; mouse — look
