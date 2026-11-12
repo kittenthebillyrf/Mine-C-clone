@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <string>
 
 namespace mc::render {
@@ -109,6 +110,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(h<10) for(int y=h;y<11;++y) world.set_block(x,y,z,BlockId::Water);
     }
+
+    { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(120);
@@ -219,6 +222,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
+        DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
         DrawText("WASD move | SPACE jump | SHIFT run | LMB break | RMB place | E inventory | 1-9 select",14,GetScreenHeight()-28,15,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
@@ -252,6 +256,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawFPS(GetScreenWidth()-90,12);
         EndDrawing();
     }
+    { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
     EnableCursor();
     CloseWindow();
     return 0;
