@@ -240,6 +240,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
             const float wheel=GetMouseWheelMove();
             if(wheel!=0) selected=(selected+(wheel>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+            if(gamepad) {
+                // Shoulder buttons cycle the hotbar; triggers are reserved for block actions.
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_2))
+                    selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_2))
+                    selected=(selected+1)%HOTBAR_SIZE;
+            }
         }
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
@@ -262,7 +269,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)))) {
+        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
@@ -270,7 +277,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
-        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))) {
+        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
@@ -300,7 +307,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("WASD / left stick move | mouse / right stick look | SPACE / A jump | LMB / L1 break | RMB / R1 place",14,GetScreenHeight()-28,14,RAYWHITE);
+        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: L2 / ZL | Place: R2 / ZR | Hotbar: L1/R1",14,GetScreenHeight()-28,13,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
