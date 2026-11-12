@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "../world/World.hpp"
+#include "../world/WorldGen112.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -140,15 +141,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     using namespace mc::world;
     const int size=std::clamp(map_size,32,96);
     World world;
-    for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
-        const int h=height_at(x,z,seed);
-        const bool sandy=h<=11;
-        for(int y=0;y<h;++y) {
-            BlockId id=(y==0)?BlockId::Bedrock:(y<h-4?BlockId::Stone:(y<h-1?BlockId::Dirt:(sandy?BlockId::Sand:BlockId::Grass)));
-            world.set_block(x,y,z,id);
-        }
-        if(h<10) for(int y=h;y<11;++y) world.set_block(x,y,z,BlockId::Water);
-    }
+    OverworldGenerator112 overworld(static_cast<std::int64_t>(seed));
+    const int chunks=(size+15)/16;
+    for(int cz=0;cz<chunks;++cz) for(int cx=0;cx<chunks;++cx)
+        overworld.generate_chunk(world,cx,cz);
 
     { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
 
