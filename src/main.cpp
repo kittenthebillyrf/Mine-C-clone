@@ -58,7 +58,7 @@ bool run_world_self_test() {
 }
 }
 int main(int argc,char** argv) {
-    int size=256; std::uint32_t seed=1122;
+    int size=128; std::uint32_t seed=1122;
     std::string output="terrain.ppm", language="en";
     bool self_test=false, open_3d=false;
     for(int i=1;i<argc;++i) {
