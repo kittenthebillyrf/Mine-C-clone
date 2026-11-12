@@ -63,16 +63,18 @@ double OctaveNoise112::sample(double x,double y,double z) const {
     for(const auto& octave:octaves_) { result+=octave.sample(x*scale,y*scale,z*scale)/scale; scale*=0.5; }
     return result;
 }
-OverworldGenerator112::OverworldGenerator112(std::int64_t seed)
-    : seed_(seed), low_(*([&]()->JavaRandom*{ static JavaRandom r; r.set_seed(seed); return &r; })(),16),
-      high_(*([&]()->JavaRandom*{ static JavaRandom r; r.set_seed(seed ^ 0x9e3779b97f4a7c15LL); return &r; })(),16),
-      selector_(*([&]()->JavaRandom*{ static JavaRandom r; r.set_seed(seed ^ 0x632be59bd9b4e019LL); return &r; })(),8),
-      detail_(*([&]()->JavaRandom*{ static JavaRandom r; r.set_seed(seed ^ 0x85157af5ULL); return &r; })(),4) {}
+OverworldGenerator112::OverworldGenerator112(std::int64_t seed) : seed_(seed) {
+    JavaRandom random(seed);
+    low_=std::make_unique<OctaveNoise112>(random,16);
+    high_=std::make_unique<OctaveNoise112>(random,16);
+    selector_=std::make_unique<OctaveNoise112>(random,8);
+    detail_=std::make_unique<OctaveNoise112>(random,4);
+}
 int OverworldGenerator112::terrain_height(int x,int z) const {
-    const double broad=low_.sample(x/180.0,0.0,z/180.0);
-    const double high=high_.sample(x/72.0,0.0,z/72.0);
-    const double selector=selector_.sample(x/110.0,0.0,z/110.0);
-    const double detail=detail_.sample(x/24.0,0.0,z/24.0);
+    const double broad=low_->sample(x/180.0,0.0,z/180.0);
+    const double high=high_->sample(x/72.0,0.0,z/72.0);
+    const double selector=selector_->sample(x/110.0,0.0,z/110.0);
+    const double detail=detail_->sample(x/24.0,0.0,z/24.0);
     const double blend=std::clamp((selector+1.0)*0.5,0.0,1.0);
     const double continental=lerp(blend,broad*0.55,high*0.8);
     return std::clamp(int(63.0+continental*23.0+detail*2.0),4,120);
