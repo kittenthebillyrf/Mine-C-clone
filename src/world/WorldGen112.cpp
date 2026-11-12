@@ -64,8 +64,24 @@ OctaveNoise112::OctaveNoise112(JavaRandom& random,int count) {
     for(int i=0;i<count;++i) octaves_.emplace_back(random);
 }
 double OctaveNoise112::sample(double x,double y,double z) const {
-    double result=0.0,scale=1.0;
-    for(const auto& octave:octaves_) { result+=octave.sample(x*scale,y*scale,z*scale)/scale; scale*=0.5; }
+    // Match NoiseGeneratorOctaves.generateNoiseOctaves: each octave floors
+    // the scaled X/Z offsets, wraps their integer parts at 2^24, and keeps
+    // the fractional remainder before sampling the improved-noise field.
+    double result=0.0;
+    double octaveScale=1.0;
+    for(const auto& octave:octaves_) {
+        const double scaledX=x*octaveScale;
+        const double scaledY=y*octaveScale;
+        const double scaledZ=z*octaveScale;
+        const auto floorX=static_cast<std::int64_t>(std::floor(scaledX));
+        const auto floorZ=static_cast<std::int64_t>(std::floor(scaledZ));
+        const double wrappedX=(scaledX-static_cast<double>(floorX))
+            +static_cast<double>(floorX%16777216LL);
+        const double wrappedZ=(scaledZ-static_cast<double>(floorZ))
+            +static_cast<double>(floorZ%16777216LL);
+        result+=octave.sample(wrappedX,scaledY,wrappedZ)/octaveScale;
+        octaveScale*=0.5;
+    }
     return result;
 }
 OverworldGenerator112::OverworldGenerator112(std::int64_t seed) : seed_(seed) {
