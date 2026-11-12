@@ -107,7 +107,7 @@ bool World::load(std::istream& input) {
             if(lo==std::char_traits<char>::eof()||hi==std::char_traits<char>::eof()) return false;
             const std::uint16_t id=static_cast<std::uint16_t>(static_cast<unsigned char>(lo))|
                                    static_cast<std::uint16_t>(static_cast<unsigned char>(hi)<<8);
-            if(id>static_cast<std::uint16_t>(BlockId::Bedrock)) return false;
+            if(id>=BLOCK_ID_COUNT) return false;
             if(!chunk.set(x,y,z,static_cast<BlockId>(id))) return false;
         }
         if(version>=2u) {
