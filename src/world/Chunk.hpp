@@ -5,6 +5,12 @@
 #include <unordered_map>
 
 namespace mc::world {
+struct BlockState {
+    std::uint8_t facing=0;
+    std::uint8_t shape=0;
+    std::uint8_t power=0;
+    std::uint8_t flags=0;
+};
 class Chunk {
 public:
     static constexpr int Width=16;
