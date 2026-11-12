@@ -60,7 +60,7 @@ bool run_world_self_test() {
 int main(int argc,char** argv) {
     int size=128; std::uint32_t seed=1122;
     std::string output="terrain.ppm", language="en";
-    bool self_test=false, open_3d=false;
+    bool self_test=false, open_3d=false, export_map=false;
     for(int i=1;i<argc;++i) {
         const std::string a=argv[i];
         if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,2048);
@@ -69,6 +69,7 @@ int main(int argc,char** argv) {
         else if(a=="--lang" && i+1<argc) language=argv[++i];
         else if(a=="--self-test") self_test=true;
         else if(a=="--3d") open_3d=true;
+        else if(a=="--map") export_map=true;
         else if(a=="--help") {
             std::cout<<mc::i18n::text("app.title",language)<<"\n"
                      <<mc::i18n::text("help.usage",language)<<"\n"
@@ -86,7 +87,7 @@ int main(int argc,char** argv) {
         std::cout<<"World core test passed\n";
         return 0;
     }
-    if(open_3d) return mc::render::run_terrain_viewer(size,seed);
+    if(open_3d || !export_map) return mc::render::run_terrain_viewer(size,seed);
     std::vector<double> heights(std::size_t(size)*size);
     for(int z=0;z<size;++z) for(int x=0;x<size;++x) heights[std::size_t(z)*size+x]=terrain(x,z,seed);
     std::ofstream out(output,std::ios::binary);
