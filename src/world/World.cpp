@@ -63,7 +63,7 @@ std::uint64_t World::chunk_revision(int cx,int cz) const {
 bool World::save(std::ostream& output) const {
     static constexpr char magic[8]={'M','C','C','W','O','R','L','D'};
     output.write(magic,sizeof(magic));
-    if(!output||!write_u32(output,1u)||!write_u32(output,static_cast<std::uint32_t>(chunks_.size()))) return false;
+    if(!output||!write_u32(output,2u)||!write_u32(output,static_cast<std::uint32_t>(chunks_.size()))) return false;
     for(const auto& entry:chunks_) {
         if(!write_u32(output,static_cast<std::uint32_t>(entry.first.x))||
            !write_u32(output,static_cast<std::uint32_t>(entry.first.z))) return false;
@@ -72,6 +72,16 @@ bool World::save(std::ostream& output) const {
             const auto id=static_cast<std::uint16_t>(chunk.get(x,y,z));
             output.put(static_cast<char>(id&0xffu));
             output.put(static_cast<char>((id>>8)&0xffu));
+            if(!output) return false;
+        }
+        if(!write_u32(output,static_cast<std::uint32_t>(chunk.state_count()))) return false;
+        for(const auto& stateEntry:chunk.state_entries()) {
+            const auto index=static_cast<std::uint32_t>(stateEntry.first);
+            if(!write_u32(output,index)) return false;
+            output.put(static_cast<char>(stateEntry.second.facing));
+            output.put(static_cast<char>(stateEntry.second.shape));
+            output.put(static_cast<char>(stateEntry.second.power));
+            output.put(static_cast<char>(stateEntry.second.flags));
             if(!output) return false;
         }
     }
@@ -83,7 +93,7 @@ bool World::load(std::istream& input) {
     input.read(header,sizeof(header));
     if(!input||!std::equal(std::begin(header),std::end(header),std::begin(magic))) return false;
     std::uint32_t version=0,count=0;
-    if(!read_u32(input,version)||version!=1u||!read_u32(input,count)||count>4096u) return false;
+    if(!read_u32(input,version)||(version!=1u&&version!=2u)||!read_u32(input,count)||count>4096u) return false;
     std::unordered_map<ChunkPos,Chunk,ChunkPosHash> loaded;
     for(std::uint32_t n=0;n<count;++n) {
         std::uint32_t rawX=0,rawZ=0;
@@ -99,6 +109,23 @@ bool World::load(std::istream& input) {
                                    static_cast<std::uint16_t>(static_cast<unsigned char>(hi)<<8);
             if(id>static_cast<std::uint16_t>(BlockId::Bedrock)) return false;
             if(!chunk.set(x,y,z,static_cast<BlockId>(id))) return false;
+        }
+        if(version>=2u) {
+            std::uint32_t stateCount=0;
+            if(!read_u32(input,stateCount)||stateCount>Chunk::Volume) return false;
+            for(std::uint32_t i=0;i<stateCount;++i) {
+                std::uint32_t index=0;
+                if(!read_u32(input,index)||index>=Chunk::Volume) return false;
+                const int x=int(index%Chunk::Width);
+                const int z=int((index/Chunk::Width)%Chunk::Depth);
+                const int y=int(index/(Chunk::Width*Chunk::Depth));
+                const int facing=input.get(),shape=input.get(),power=input.get(),flags=input.get();
+                if(facing<0||shape<0||power<0||flags<0||chunk.get(x,y,z)==BlockId::Air) return false;
+                if(chunk.get_state(x,y,z)!=nullptr) return false;
+                const BlockState state{static_cast<std::uint8_t>(facing),static_cast<std::uint8_t>(shape),
+                                       static_cast<std::uint8_t>(power),static_cast<std::uint8_t>(flags)};
+                if(!chunk.set_state(x,y,z,state)) return false;
+            }
         }
     }
     if(input.peek()!=std::char_traits<char>::eof()) return false;
