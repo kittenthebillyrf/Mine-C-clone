@@ -26,6 +26,7 @@ public:
     bool erase_state(int x,int y,int z);
     std::uint64_t revision() const { return revision_; }
     std::size_t state_count() const { return states_.size(); }
+    const std::unordered_map<std::size_t,BlockState>& state_entries() const { return states_; }
 private:
     static std::size_t index(int x,int y,int z);
     std::array<BlockId,Volume> blocks_{};
