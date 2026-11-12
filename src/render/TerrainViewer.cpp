@@ -196,10 +196,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
+        const bool gamepad=IsGamepadAvailable(0);
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw-=md.x*0.0025f;
             pitch=std::clamp(pitch-md.y*0.0025f,-1.45f,1.45f);
+            if(gamepad) {
+                const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
+                const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
+                if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f*dt;
+                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f*dt,-1.45f,1.45f);
+            }
         }
         const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
         const float rightX=std::cos(yaw),rightZ=std::sin(yaw);
@@ -208,6 +215,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(captured && IsKeyDown(KEY_S)) { mx-=forwardX; mz-=forwardZ; }
         if(captured && IsKeyDown(KEY_D)) { mx+=rightX; mz+=rightZ; }
         if(captured && IsKeyDown(KEY_A)) { mx-=rightX; mz-=rightZ; }
+        if(captured && gamepad) {
+            const float stickX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_X);
+            const float stickY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_Y);
+            if(std::abs(stickX)>0.16f) { mx+=rightX*stickX; mz+=rightZ*stickX; }
+            if(std::abs(stickY)>0.16f) { mx-=forwardX*stickY; mz-=forwardZ*stickY; }
+        }
         const float len=std::sqrt(mx*mx+mz*mz);
         if(len>0) { mx/=len; mz/=len; }
         const float speed=IsKeyDown(KEY_LEFT_SHIFT)?10.0f:6.0f;
@@ -216,7 +229,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
         const float ground=float(surface_y(world,groundX,groundZ))*BLOCK;
         if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
-        if(captured && IsKeyPressed(KEY_SPACE)&&grounded) { vy=10.5f; grounded=false; }
+        if(captured && grounded && (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) { vy=10.5f; grounded=false; }
         vy-=25.0f*dt; py+=vy*dt;
         const float floorY=float(surface_y(world,int(px),int(pz)))*BLOCK;
         if(py<=floorY) { py=floorY; vy=0; grounded=true; }
@@ -247,7 +260,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
@@ -255,7 +268,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
-        if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        if(captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
@@ -285,7 +298,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("WASD move | SPACE jump | SHIFT run | LMB break | RMB place | E inventory | 1-9 select",14,GetScreenHeight()-28,15,RAYWHITE);
+        DrawText("WASD / left stick move | mouse / right stick look | SPACE / A jump | LMB / L1 break | RMB / R1 place",14,GetScreenHeight()-28,14,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
