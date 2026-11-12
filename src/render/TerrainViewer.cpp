@@ -215,7 +215,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(!paused && (IsKeyPressed(KEY_F5)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_THUMB)))) {
             thirdPerson=!thirdPerson;
         }
-        const float controlDt=(paused||inventoryOpen||craftingOpen)?0.0f:*controlDt;
+        const float controlDt=(paused||inventoryOpen)?0.0f:dt;
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw-=md.x*0.0025f;
@@ -223,8 +223,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(gamepad) {
                 const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
                 const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
-                if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f**controlDt;
-                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f**controlDt,-1.45f,1.45f);
+                if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f*dt;
+                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f*dt,-1.45f,1.45f);
             }
         }
         const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
@@ -244,13 +244,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(len>0) { mx/=len; mz/=len; }
         const bool crouching=IsKeyDown(KEY_LEFT_SHIFT);
         const float speed=crouching?2.5f:6.0f;
-        const float nx=std::clamp(px+mx*speed**controlDt,1.0f,float(size-2));
-        const float nz=std::clamp(pz+mz*speed**controlDt,1.0f,float(size-2));
+        const float nx=std::clamp(px+mx*speed*dt,1.0f,float(size-2));
+        const float nz=std::clamp(pz+mz*speed*dt,1.0f,float(size-2));
         const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
         const float ground=float(surface_y(world,groundX,groundZ))*BLOCK;
         if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
         if(captured && grounded && (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) { vy=10.5f; grounded=false; }
-        vy-=25.0f**controlDt; py+=vy**controlDt;
+        vy-=25.0f*dt; py+=vy*dt;
         const float floorY=float(surface_y(world,int(px),int(pz)))*BLOCK;
         if(py<=floorY) { py=floorY; vy=0; grounded=true; }
 
@@ -267,7 +267,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
         }
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            const int panelW=520,panelH=310,panelX=GetScreenWi*controlDth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             const Vector2 mouse=GetMousePosition();
             for(int i=0;i<INVENTORY_SIZE;++i) {
                 const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
@@ -292,7 +292,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
 
         Vector3 hit{},previous{};
-        const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWi*controlDth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
+        const bool hasTarget=ray_block(GetScreenToWorldRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
         if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
@@ -301,7 +301,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
-        if(!paused&&!inventoryOpen&&!craftingOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
