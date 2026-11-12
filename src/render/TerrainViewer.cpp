@@ -129,6 +129,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool inMenu=true;
     bool optionsOpen=false;
     bool multiplayerOpen=false;
+    bool requestQuit=false;
     float menuYaw=0.0f;
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
@@ -175,7 +176,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     else if(i==0) { inMenu=false; captured=true; DisableCursor(); }
                     else if(i==1) multiplayerOpen=true;
                     else if(i==2) optionsOpen=true;
-                    else if(i==3) SetWindowShouldClose(true);
+                    else if(i==3) requestQuit=true;
                 }
             }
             if(!optionsOpen&&!multiplayerOpen) DrawText("Multiplayer is coming in a future update",GetScreenWidth()/2-178,by+4*(bh+gap)+8,15,RAYWHITE);
@@ -188,6 +189,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
             DrawText("Mine C++ Clone  |  Inspired by the Java 1.12 era",12,GetScreenHeight()-28,14,RAYWHITE);
             EndDrawing();
+            if(requestQuit) break;
             continue;
         }
         if(IsKeyPressed(KEY_ESCAPE)) { captured=!captured; inventoryOpen=false; if(captured) DisableCursor(); else EnableCursor(); }
