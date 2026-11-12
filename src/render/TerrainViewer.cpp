@@ -128,6 +128,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool captured=true;
     bool inMenu=true;
     bool optionsOpen=false;
+    bool multiplayerOpen=false;
     float menuYaw=0.0f;
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
@@ -157,9 +158,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("MINECRAFT",GetScreenWidth()/2-220,92,64,RAYWHITE);
             DrawText("C++ EDITION",GetScreenWidth()/2-68,158,22,YELLOW);
             DrawText("A block world is waiting for you",GetScreenWidth()/2-150,194,18,RAYWHITE);
-            const int bw=300,bh=44,gap=8,bx=GetScreenWidth()/2-bw/2,by=optionsOpen?330:300;
+            const int bw=320,bh=44,gap=8,bx=GetScreenWidth()/2-bw/2,by=(optionsOpen||multiplayerOpen)?330:300;
             const char* labels[4]={"Singleplayer","Multiplayer","Options","Quit Game"};
-            const int count=optionsOpen?1:4;
+            const int count=(optionsOpen||multiplayerOpen)?1:4;
             const Vector2 mouse=GetMousePosition();
             for(int i=0;i<count;++i) {
                 const int y=by+i*(bh+gap);
@@ -167,17 +168,21 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const bool hover=CheckCollisionPointRec(mouse,rect);
                 DrawRectangleRec(rect,hover?Color{25,25,25,245}:Color{75,75,75,225});
                 DrawRectangleLinesEx(rect,2,hover?RAYWHITE:Color{25,25,25,255});
-                const char* label=optionsOpen?"Back":labels[i];
+                const char* label=(optionsOpen||multiplayerOpen)?"Back":labels[i];
                 DrawText(label,bx+(bw-MeasureText(label,22))/2,y+10,22,RAYWHITE);
                 if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    if(optionsOpen) optionsOpen=false;
+                    if(optionsOpen||multiplayerOpen) { optionsOpen=false; multiplayerOpen=false; }
                     else if(i==0) { inMenu=false; captured=true; DisableCursor(); }
+                    else if(i==1) multiplayerOpen=true;
                     else if(i==2) optionsOpen=true;
                     else if(i==3) SetWindowShouldClose(true);
                 }
             }
-            if(!optionsOpen) DrawText("Multiplayer is coming in a future update",GetScreenWidth()/2-178,by+4*(bh+gap)+8,15,RAYWHITE);
-            else {
+            if(!optionsOpen&&!multiplayerOpen) DrawText("Multiplayer is coming in a future update",GetScreenWidth()/2-178,by+4*(bh+gap)+8,15,RAYWHITE);
+            else if(multiplayerOpen) {
+                DrawText("Online and LAN multiplayer are not implemented yet",GetScreenWidth()/2-205,by+bh+22,17,RAYWHITE);
+                DrawText("This screen will be connected when networking is added",GetScreenWidth()/2-225,by+bh+50,15,RAYWHITE);
+            } else {
                 DrawText("Graphics: 3D voxel panorama",GetScreenWidth()/2-125,by+bh+18,17,RAYWHITE);
                 DrawText("World seed and display settings will be added here",GetScreenWidth()/2-215,by+bh+44,15,RAYWHITE);
             }
