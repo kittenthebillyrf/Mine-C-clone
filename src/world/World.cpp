@@ -42,6 +42,24 @@ bool World::set_block(int wx,int y,int wz,BlockId block) {
     if(y<0||y>=Chunk::Height) return false;
     return get_or_create_chunk(floor_div16(wx),floor_div16(wz)).set(local16(wx),y,local16(wz),block);
 }
+bool World::set_block_state(int wx,int y,int wz,const BlockState& state) {
+    if(y<0||y>=Chunk::Height) return false;
+    return get_or_create_chunk(floor_div16(wx),floor_div16(wz)).set_state(local16(wx),y,local16(wz),state);
+}
+const BlockState* World::get_block_state(int wx,int y,int wz) const {
+    if(y<0||y>=Chunk::Height) return nullptr;
+    const auto* chunk=find_chunk(floor_div16(wx),floor_div16(wz));
+    return chunk?chunk->get_state(local16(wx),y,local16(wz)):nullptr;
+}
+bool World::erase_block_state(int wx,int y,int wz) {
+    if(y<0||y>=Chunk::Height) return false;
+    auto it=chunks_.find(ChunkPos{floor_div16(wx),floor_div16(wz)});
+    return it!=chunks_.end()&&it->second.erase_state(local16(wx),y,local16(wz));
+}
+std::uint64_t World::chunk_revision(int cx,int cz) const {
+    const auto* chunk=find_chunk(cx,cz);
+    return chunk?chunk->revision():0;
+}
 bool World::save(std::ostream& output) const {
     static constexpr char magic[8]={'M','C','C','W','O','R','L','D'};
     output.write(magic,sizeof(magic));
