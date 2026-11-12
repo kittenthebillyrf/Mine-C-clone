@@ -307,7 +307,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: L2 / ZL | Place: R2 / ZR | Hotbar: L1/R1",14,GetScreenHeight()-28,13,RAYWHITE);
+        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: R2 / ZR | Place: L2 / ZL | Hotbar: L1/R1",14,GetScreenHeight()-28,13,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
