@@ -23,4 +23,22 @@ bool Chunk::set(int x,int y,int z,BlockId block) {
 std::size_t Chunk::count(BlockId block) const {
     return std::size_t(std::count(blocks_.begin(),blocks_.end(),block));
 }
+bool Chunk::set_state(int x,int y,int z,const BlockState& state) {
+    if(x<0||x>=Width||y<0||y>=Height||z<0||z>=Depth) return false;
+    if(get(x,y,z)==BlockId::Air) return false;
+    states_[index(x,y,z)]=state;
+    ++revision_;
+    return true;
+}
+const BlockState* Chunk::get_state(int x,int y,int z) const {
+    if(x<0||x>=Width||y<0||y>=Height||z<0||z>=Depth) return nullptr;
+    const auto it=states_.find(index(x,y,z));
+    return it==states_.end()?nullptr:&it->second;
+}
+bool Chunk::erase_state(int x,int y,int z) {
+    if(x<0||x>=Width||y<0||y>=Height||z<0||z>=Depth) return false;
+    if(states_.erase(index(x,y,z))==0) return false;
+    ++revision_;
+    return true;
+}
 }
