@@ -63,6 +63,22 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
+bool add_item(ItemStack* inventory, mc::world::BlockId id) {
+    // Merge into existing stacks before using an empty slot.
+    for(int i=0;i<INVENTORY_SIZE;++i) {
+        if(inventory[i].id==id && inventory[i].count>0 && inventory[i].count<64) {
+            ++inventory[i].count;
+            return true;
+        }
+    }
+    for(int i=0;i<INVENTORY_SIZE;++i) {
+        if(inventory[i].count==0) {
+            inventory[i]={id,1};
+            return true;
+        }
+    }
+    return false;
+}
 bool ray_block(Ray ray,mc::world::World& world,Vector3& hit,Vector3& previous) {
     Vector3 p=ray.position;
     const Vector3 step=Vector3Scale(Vector3Normalize(ray.direction),0.08f);
@@ -98,7 +114,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     SetTargetFPS(120);
     DisableCursor();
     float px=float(size)*0.5f,pz=float(size)*0.5f;
-    float py=float(height_at(int(px),int(pz)))*BLOCK;
+    float py=float(height_at(int(px),int(pz),seed))*BLOCK;
     float vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
     int selected=0;
@@ -142,8 +158,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         if(captured) {
             for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
-            const Vector2 wheel=GetMouseWheelMoveV();
-            if(wheel.y!=0) selected=(selected+(wheel.y>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+            const float wheel=GetMouseWheelMove();
+            if(wheel!=0) selected=(selected+(wheel>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
         }
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
@@ -170,11 +186,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
-                for(int i=0;i<INVENTORY_SIZE;++i) {
-                    if(inventory[i].id==broken&&inventory[i].count<64) { ++inventory[i].count; break; }
-                    if(inventory[i].count==0) { inventory[i]={broken,1}; break; }
-                }
-                world.set_block(bx,by,bz,BlockId::Air);
+                // Never delete a block if its drop cannot fit in the inventory.
+                if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
         if(captured&&hasTarget&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
