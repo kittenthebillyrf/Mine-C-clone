@@ -5,6 +5,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+
+# Serialize builds so concurrent runs cannot race while publishing the EXE.
+concurrency:
+  group: windows-x64-main-build
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: windows-latest
