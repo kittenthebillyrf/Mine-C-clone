@@ -50,6 +50,9 @@ private:
     std::unique_ptr<OctaveNoise112> low_;
     std::unique_ptr<OctaveNoise112> high_;
     std::unique_ptr<OctaveNoise112> selector_;
+    // Vanilla 1.12.2 constructs a 4-octave surface Perlin generator here;
+    // reserve the same RNG sequence before scale/depth/forest generators.
+    std::unique_ptr<OctaveNoise112> surface_;
     std::unique_ptr<OctaveNoise112> scale_;
     std::unique_ptr<OctaveNoise112> depth_;
     std::unique_ptr<OctaveNoise112> forest_;
