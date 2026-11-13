@@ -251,6 +251,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool inventoryOpen=false;
     bool creativeOpen=false;
     bool paused=false;
+    bool pauseOptionsOpen=false;
+    int pauseSelection=0;
+    float cameraFov=70.0f;
     bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
@@ -365,11 +368,49 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(requestQuit) break;
             continue;
         }
-        if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
-            paused=!paused;
-            inventoryOpen=false; creativeOpen=false;
-            captured=!paused;
-            if(captured) DisableCursor(); else EnableCursor();
+        const bool pausePressed=IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT));
+        if(pausePressed) {
+            if(!paused) { paused=true; pauseOptionsOpen=false; pauseSelection=0; inventoryOpen=false; creativeOpen=false; captured=false; EnableCursor(); }
+            else if(pauseOptionsOpen) { pauseOptionsOpen=false; pauseSelection=0; }
+            else { paused=false; captured=true; DisableCursor(); }
+        }
+        if(paused) {
+            const bool up=IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP));
+            const bool down=IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN));
+            const bool accept=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+            const bool back=IsKeyPressed(KEY_BACKSPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+            if(pauseOptionsOpen) {
+                if(back) { pauseOptionsOpen=false; pauseSelection=0; }
+                if(up) cameraFov=std::min(100.0f,cameraFov+2.0f);
+                if(down) cameraFov=std::max(50.0f,cameraFov-2.0f);
+            } else {
+                if(up) pauseSelection=(pauseSelection+2)%3;
+                if(down) pauseSelection=(pauseSelection+1)%3;
+                const int bw=300,bh=48,gap=12,bx=GetScreenWidth()/2-bw/2,by=GetScreenHeight()/2-5;
+                const Vector2 mouse=GetMousePosition();
+                for(int i=0;i<3;++i) {
+                    const Rectangle r{float(bx),float(by+i*(bh+gap)),float(bw),float(bh)};
+                    if(CheckCollisionPointRec(mouse,r)) {
+                        pauseSelection=i;
+                        if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            if(i==0) { paused=false; captured=true; DisableCursor(); }
+                            else if(i==1) { pauseOptionsOpen=true; pauseSelection=0; }
+                            else {
+                                for(const ChunkPos& pos:world.chunk_positions()) world.save_chunk_file(pos.x,pos.z,"world_chunks");
+                                paused=false; pauseOptionsOpen=false; inMenu=true; captured=false; EnableCursor(); menuSelection=0;
+                            }
+                        }
+                    }
+                }
+                if(accept) {
+                    if(pauseSelection==0) { paused=false; captured=true; DisableCursor(); }
+                    else if(pauseSelection==1) { pauseOptionsOpen=true; pauseSelection=0; }
+                    else {
+                        for(const ChunkPos& pos:world.chunk_positions()) world.save_chunk_file(pos.x,pos.z,"world_chunks");
+                        paused=false; pauseOptionsOpen=false; inMenu=true; captured=false; EnableCursor(); menuSelection=0;
+                    }
+                }
+            }
         }
         if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_UP)))) {
             inventoryOpen=!inventoryOpen; creativeOpen=false;
@@ -544,7 +585,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             camera.position=Vector3{px*BLOCK,py+eyeHeight,pz*BLOCK};
             camera.target=Vector3Add(camera.position,Vector3Scale(lookDirection,1.0f));
         }
-        camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
+        camera.up=Vector3{0,1,0}; camera.fovy=cameraFov; camera.projection=CAMERA_PERSPECTIVE;
 
         Vector3 hit{},previous{};
         const Ray centerRay{camera.position,Vector3Normalize(Vector3Subtract(camera.target,camera.position))};
@@ -662,9 +703,29 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("R: close",panelX+24,panelY+282,16,RAYWHITE);
         }
         if(paused) {
-            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.68f));
-            DrawText("PAUSED",GetScreenWidth()/2-75,GetScreenHeight()/2-75,36,RAYWHITE);
-            DrawText("Press + / START / ESC to resume",GetScreenWidth()/2-180,GetScreenHeight()/2-18,20,RAYWHITE);
+            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.78f));
+            DrawText("GAME MENU",GetScreenWidth()/2-105,GetScreenHeight()/2-190,34,RAYWHITE);
+            if(pauseOptionsOpen) {
+                DrawText("SETTINGS",GetScreenWidth()/2-82,GetScreenHeight()/2-115,28,YELLOW);
+                DrawText(TextFormat("Field of view: %.0f",cameraFov),GetScreenWidth()/2-115,GetScreenHeight()/2-42,21,RAYWHITE);
+                DrawText("UP / DOWN: change FOV",GetScreenWidth()/2-120,GetScreenHeight()/2+12,17,LIGHTGRAY);
+                DrawText("BACKSPACE / B: return",GetScreenWidth()/2-128,GetScreenHeight()/2+58,17,LIGHTGRAY);
+                DrawText("PLUS / START: resume game",GetScreenWidth()/2-145,GetScreenHeight()/2+105,16,LIGHTGRAY);
+            } else {
+                const char* pauseLabels[3]={"Back to Game","Settings","Save & Quit to Main Menu"};
+                const int bw=300,bh=48,gap=12,bx=GetScreenWidth()/2-bw/2,by=GetScreenHeight()/2-5;
+                const Vector2 mouse=GetMousePosition();
+                for(int i=0;i<3;++i) {
+                    const int y=by+i*(bh+gap);
+                    const Rectangle r{float(bx),float(y),float(bw),float(bh)};
+                    const bool hover=CheckCollisionPointRec(mouse,r);
+                    const bool active=(pauseSelection==i)||hover;
+                    DrawRectangleRec(r,active?Color{65,65,65,250}:Color{30,30,30,240});
+                    DrawRectangleLinesEx(r,2,active?YELLOW:GRAY);
+                    DrawText(pauseLabels[i],bx+(bw-MeasureText(pauseLabels[i],19))/2,y+13,19,RAYWHITE);
+                }
+                DrawText("PLUS / START / ESC: resume",GetScreenWidth()/2-145,by+3*(bh+gap)+8,16,LIGHTGRAY);
+            }
         }
         if(inventoryOpen) {
             const int panelW=760,panelH=380,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
