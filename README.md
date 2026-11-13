@@ -14,7 +14,7 @@ The playable world is bounded to a 4096 x 4096 block area. Chunks are generated 
 
 - Deterministic, seed-based multi-octave terrain fields.
 - Separate continentalness, erosion, ridge, detail, temperature and rainfall signals.
-- Plains, forest, desert, taiga, tundra, swamp and savanna biome classification.
+- Plains, forest, desert, taiga, tundra, swamp, savanna, rainforest, seasonal forest, shrubland and ice-desert biome classification.
 - River-like lowland channels, sea-level water, sand and gravel surface patches.
 - Layered bedrock, stone, dirt and biome-aware surface materials.
 - Interpolated 3D cave fields, plus coal and iron ore deposits.
