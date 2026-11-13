@@ -477,6 +477,27 @@ bool move_player_entity(const mc::world::World& world,double& px,double& py,doub
                         double& dx,double& dy,double& dz,bool sneaking,bool wasOnGround,
                         bool& collidedHorizontally,bool& collidedVertically,bool& onGround) {
     PlayerAabb box=player_box(px,py,pz);
+    // If a falling block or world edit closes into the player's current space,
+    // recover vertically to the nearest free position before applying movement.
+    if(!collision_boxes(world,box).empty()) {
+        bool recovered=false;
+        for(double lift=0.05;lift<=2.0001;lift+=0.05) {
+            const PlayerAabb candidate=box.offset(0.0,lift,0.0);
+            if(collision_boxes(world,candidate).empty()) {
+                box=candidate;
+                py+=lift;
+                recovered=true;
+                break;
+            }
+        }
+        if(!recovered) {
+            dx=dy=dz=0.0;
+            collidedHorizontally=true;
+            collidedVertically=true;
+            onGround=false;
+            return false;
+        }
+    }
     if(sneaking && wasOnGround) {
         while(dx!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,0.0)).empty()) {
             if(dx>-0.05 && dx<0.05) dx=0.0;
