@@ -1,7 +1,11 @@
 name: Windows x64 build
 on:
   push:
-    branches: [ main ]
+    branches: [ main, switch-port ]
+    paths:
+      - "CMakeLists.txt"
+      - "src/**"
+      - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 permissions:
   contents: write
