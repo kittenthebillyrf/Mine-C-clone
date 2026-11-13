@@ -160,8 +160,24 @@ bool run_chunk_mesh_self_test() {
             for(int x=0;x<mc::world::Chunk::Width;++x)
                 if(!world.set_block(x,y,z,mc::world::BlockId::Stone)) return false;
     const auto mesh=mc::render::ChunkMeshBuilder::build(world,0,0,0);
-    return mesh.vertices.size()==24 && mesh.indices.size()==36 &&
-           mesh.source_revision==world.chunk_revision(0,0);
+    if(mesh.vertices.size()!=24 || mesh.indices.size()!=36 ||
+       mesh.source_revision!=world.chunk_revision(0,0)) return false;
+
+    // Partial blocks and liquids must remain on the model renderer path;
+    // they must never be approximated as full cubes by this mesher.
+    mc::world::World partialWorld;
+    if(!partialWorld.set_block(1,1,1,mc::world::BlockId::OakSlab) ||
+       !partialWorld.set_block(2,1,1,mc::world::BlockId::OakFence) ||
+       !partialWorld.set_block(3,1,1,mc::world::BlockId::OakStairs) ||
+       !partialWorld.set_block(4,1,1,mc::world::BlockId::Cactus) ||
+       !partialWorld.set_block(5,1,1,mc::world::BlockId::Water) ||
+       !partialWorld.set_block(6,1,1,mc::world::BlockId::Lava)) return false;
+    if(!mc::render::ChunkMeshBuilder::build(partialWorld,0,0,0).empty()) return false;
+
+    // A non-cube neighbour cannot incorrectly hide a full-cube face.
+    if(!partialWorld.set_block(0,1,1,mc::world::BlockId::Stone)) return false;
+    const auto mixed=mc::render::ChunkMeshBuilder::build(partialWorld,0,0,0);
+    return mixed.vertices.size()==24 && mixed.indices.size()==36;
 }
 }
 int main(int argc,char** argv) {
