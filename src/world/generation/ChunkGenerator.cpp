@@ -111,8 +111,8 @@ void ChunkGenerator::generate_chunk(World& world,int cx,int cz) const {
         const double chance=unit(hash3(wx,0,wz,seed_^0x5452454553504157ULL));
         if(chance<0.965) continue;
         const int trunk=3+int(unit(hash3(wx,1,wz,seed_))*3.0);
-        for(int y=1;y<=trunk;++y) world.set_block(wx,c.height+y,wz,BlockId::Wood);
-        const int crownY=c.height+trunk;
+        for(int y=1;y<=trunk;++y) world.set_block(wx,c.height-1+y,wz,BlockId::Wood);
+        const int crownY=c.height-1+trunk;
         for(int dy=-2;dy<=2;++dy) for(int dx=-2;dx<=2;++dx) for(int dz=-2;dz<=2;++dz) {
             const int manhattan=std::abs(dx)+std::abs(dz)+std::max(0,std::abs(dy)-1);
             if(manhattan>4|| (dx==0&&dz==0&&dy<1)) continue;
