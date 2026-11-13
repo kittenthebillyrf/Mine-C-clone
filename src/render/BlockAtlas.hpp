@@ -45,13 +45,16 @@ inline int block_atlas_tile(mc::world::BlockId id) {
         case BlockId::Gravel: return 9;
         case BlockId::CoalOre: return 10;
         case BlockId::IronOre: return 11;
+        case BlockId::Planks: return 12;
+        case BlockId::Stick: return 13;
+        case BlockId::CraftingTable: return 14;
         default: return 0;
     }
 }
 struct BlockAtlasAssets {
     Texture2D texture{};
     Material material{};
-    Mesh meshes[12]{};
+    Mesh meshes[15]{};
 };
 
 // Build a cube with independent UVs for every face. The previous implementation
@@ -131,7 +134,7 @@ inline BlockAtlasAssets& load_block_atlas() {
                 SetTextureFilter(assets.texture, TEXTURE_FILTER_POINT);
                 assets.material = LoadMaterialDefault();
                 SetMaterialTexture(&assets.material, MATERIAL_MAP_DIFFUSE, assets.texture);
-                for (int tile = 0; tile < 12; ++tile) {
+                for (int tile = 0; tile < 15; ++tile) {
                     const int topTile = tile;
                     const int bottomTile = (tile == 1) ? 0 : tile; // Grass bottom = dirt.
                     assets.meshes[tile] = make_block_mesh(tile, topTile, bottomTile);
