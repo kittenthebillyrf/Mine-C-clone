@@ -723,7 +723,7 @@ bool load_player_state(double& px,double& py,double& pz,
     for(int i=0;i<INVENTORY_SIZE;++i) {
         unsigned int id=0;
         int count=0;
-        if(!(input>>id>>count)||id>=BLOCK_ID_COUNT||count<0||count>64) return false;
+        if(!(input>>id>>count)||id>=mc::world::BLOCK_ID_COUNT||count<0||count>64) return false;
         loaded[i]={static_cast<mc::world::BlockId>(id),count};
         if(count==0) loaded[i].id=mc::world::BlockId::Air;
     }
