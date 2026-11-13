@@ -43,9 +43,11 @@ private:
 // First portable Overworld terrain pass. Noise/RNG primitives mirror the
 // 1.12.2 implementation; biome surface replacement, caves, structures and
 // decoration are separate generation stages.
+enum class BiomeId112 : std::uint8_t { Plains, Forest, Desert, Taiga, Mountains, Snowy, Swamp };
 struct BiomeTerrain112 {
     float base_height=0.125f;
     float height_variation=0.05f;
+    BiomeId112 id=BiomeId112::Plains;
 };
 struct DensityMap112 {
     std::array<double,5*5*33> values{};
