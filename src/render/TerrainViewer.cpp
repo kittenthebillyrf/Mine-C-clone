@@ -1448,6 +1448,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             fallingBlockAccumulator+=PLAYER_TICK;
             if(fallingBlockAccumulator>=0.20f) {
                 world.tick_falling_blocks();
+                world.tick_water(48);
                 fallingBlockAccumulator-=0.20f;
             }
         }

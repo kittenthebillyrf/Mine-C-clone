@@ -153,6 +153,54 @@ std::size_t World::tick_falling_blocks() {
     }
     return moved;
 }
+
+std::size_t World::tick_water(std::size_t budget) {
+    if(budget==0) return 0;
+    struct WaterCell { int x,y,z; std::uint8_t level; bool source; };
+    std::vector<WaterCell> active;
+    // Snapshot the current water set: newly flowed cells are processed on a
+    // later tick, keeping the work bounded and independent of hash iteration.
+    for(const auto& entry:chunks_) {
+        const int ox=entry.first.x*Chunk::Width,oz=entry.first.z*Chunk::Depth;
+        const Chunk& chunk=entry.second;
+        for(const std::size_t index:chunk.special_blocks()) {
+            const int lx=int(index%Chunk::Width);
+            const int lz=int((index/Chunk::Width)%Chunk::Depth);
+            const int y=int(index/(Chunk::Width*Chunk::Depth));
+            if(chunk.get_unchecked(lx,y,lz)!=BlockId::Water) continue;
+            const BlockState* state=chunk.get_state(lx,y,lz);
+            const bool flowing=state&&state->flags==1;
+            active.push_back({ox+lx,y,oz+lz,static_cast<std::uint8_t>(flowing?std::clamp<int>(state->power,1,7):0),!flowing});
+        }
+    }
+    std::size_t changed=0;
+    for(const WaterCell& cell:active) {
+        if(changed>=budget) break;
+        if(get_block(cell.x,cell.y,cell.z)!=BlockId::Water) continue;
+        const auto flow=[&](int x,int y,int z,std::uint8_t level) {
+            if(changed>=budget||y<0||y>=Chunk::Height) return;
+            const BlockId target=get_block(x,y,z);
+            if(target!=BlockId::Air) return;
+            if(set_block(x,y,z,BlockId::Water)) {
+                set_block_state(x,y,z,BlockState{0,0,level,1});
+                ++changed;
+            }
+        };
+        // Vanilla-style priority: downward flow first, then four horizontal
+        // directions with increasing decay level. Source blocks remain stable.
+        if(cell.y>0 && get_block(cell.x,cell.y-1,cell.z)==BlockId::Air) {
+            flow(cell.x,cell.y-1,cell.z,1);
+            continue;
+        }
+        const std::uint8_t next=static_cast<std::uint8_t>(cell.source?1:cell.level+1);
+        if(next>7) continue;
+        flow(cell.x+1,cell.y,cell.z,next);
+        flow(cell.x-1,cell.y,cell.z,next);
+        flow(cell.x,cell.y,cell.z+1,next);
+        flow(cell.x,cell.y,cell.z-1,next);
+    }
+    return changed;
+}
 bool World::save(std::ostream& output) const {
     static constexpr char magic[8]={'M','C','C','W','O','R','L','D'};
     output.write(magic,sizeof(magic));
