@@ -28,6 +28,11 @@ Color color_for(mc::world::BlockId id) {
         case BlockId::Sand:return Color{210,194,139,255};
         case BlockId::Water:return Color{55,115,205,170};
         case BlockId::Bedrock:return Color{55,55,58,255};
+        case BlockId::Wood:return Color{126,91,54,255};
+        case BlockId::Leaves:return Color{55,135,58,220};
+        case BlockId::Gravel:return Color{115,113,110,255};
+        case BlockId::CoalOre:return Color{65,65,68,255};
+        case BlockId::IronOre:return Color{190,135,105,255};
         default:return BLANK;
     }
 }
