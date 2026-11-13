@@ -306,7 +306,6 @@ bool move_player_entity(const mc::world::World& world,double& px,double& py,doub
                         double& dx,double& dy,double& dz,bool sneaking,bool wasOnGround,
                         bool& collidedHorizontally,bool& collidedVertically,bool& onGround) {
     PlayerAabb box=player_box(px,py,pz);
-    double requestedX=dx,requestedY=dy,requestedZ=dz;
     if(sneaking && wasOnGround) {
         while(dx!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,0.0)).empty()) {
             if(dx>-0.05 && dx<0.05) dx=0.0;
@@ -544,8 +543,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(const BlockId id:texturedBlocks)
         blockModels[static_cast<unsigned int>(id)]=make_block_model(id,blockAtlas);
     if(IsImageValid(blockAtlas)) UnloadImage(blockAtlas);
-    float px=float(size)*0.5f,pz=float(size)*0.5f;
-    float py=float(surface_y(world,int(px),int(pz)));
+    double px=double(size)*0.5,pz=double(size)*0.5;
+    double py=double(surface_y(world,int(px),int(pz)));
     double motionX=0.0,motionY=0.0,motionZ=0.0;
     float yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
@@ -741,10 +740,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float eyeHeight=crouching?1.54f:EYE_HEIGHT;
         const Vector3 lookDirection=Vector3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),-std::cos(yaw)*std::cos(pitch)};
         if(thirdPerson) {
-            camera.position=Vector3{px*BLOCK-lookDirection.x*8.0f,(py+eyeHeight)*BLOCK+lookDirection.y*2.0f-lookDirection.y*8.0f,pz*BLOCK-lookDirection.z*8.0f};
-            camera.target=Vector3{px*BLOCK,(py+eyeHeight)*BLOCK,pz*BLOCK};
+            camera.position=Vector3{float(px*BLOCK-lookDirection.x*8.0f),float((py+eyeHeight)*BLOCK+lookDirection.y*2.0f-lookDirection.y*8.0f),float(pz*BLOCK-lookDirection.z*8.0f)};
+            camera.target=Vector3{float(px*BLOCK),float((py+eyeHeight)*BLOCK),float(pz*BLOCK)};
         } else {
-            camera.position=Vector3{px*BLOCK,(py+eyeHeight)*BLOCK,pz*BLOCK};
+            camera.position=Vector3{float(px*BLOCK),float((py+eyeHeight)*BLOCK),float(pz*BLOCK)};
             camera.target=Vector3Add(camera.position,Vector3Scale(lookDirection,1.0f));
         }
         camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
@@ -763,7 +762,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
-                const float cx=(float(bx)+0.5f)*BLOCK,cz=(float(bz)+0.5f)*BLOCK;
                 const PlayerAabb playerBounds=player_box(px,py,pz);
                 const PlayerAabb targetBounds{double(bx),double(by),double(bz),double(bx+1),double(by+1),double(bz+1)};
                 const bool overlaps=intersects(playerBounds,targetBounds);
@@ -804,7 +802,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
         if(creativeOpen) {
-            constexpr int PAGE_SIZE=48, GRID_COLS=8, GRID_ROWS=6;
+            constexpr int PAGE_SIZE=48, GRID_COLS=8;
             const int totalPages=(int(BLOCK_ID_COUNT)-1+PAGE_SIZE-1)/PAGE_SIZE;
             const int panelW=704,panelH=470,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             creativePage=std::clamp(creativePage,0,totalPages-1);
