@@ -95,10 +95,11 @@ int main(int argc,char** argv) {
         unsigned char rgb[3];
         using mc::world::generation::Biome;
         if(column.height<62) { rgb[0]=35; rgb[1]=75; rgb[2]=150; }
-        else if(column.biome==Biome::Desert||column.biome==Biome::Savanna) { rgb[0]=210; rgb[1]=190; rgb[2]=125; }
+        else if(column.biome==Biome::Desert||column.biome==Biome::IceDesert||column.biome==Biome::Savanna) { rgb[0]=210; rgb[1]=190; rgb[2]=125; }
         else if(column.biome==Biome::Tundra||column.height>145) { rgb[0]=175; rgb[1]=180; rgb[2]=185; }
         else if(column.biome==Biome::Swamp) { rgb[0]=65; rgb[1]=105; rgb[2]=55; }
-        else if(column.biome==Biome::Forest||column.biome==Biome::Taiga) { rgb[0]=45; rgb[1]=125; rgb[2]=58; }
+        else if(column.biome==Biome::Forest||column.biome==Biome::Taiga||column.biome==Biome::SeasonalForest||column.biome==Biome::Rainforest) { rgb[0]=45; rgb[1]=125; rgb[2]=58; }
+        else if(column.biome==Biome::Shrubland) { rgb[0]=135; rgb[1]=145; rgb[2]=85; }
         else { rgb[0]=90; rgb[1]=165; rgb[2]=70; }
         out.write(reinterpret_cast<char*>(rgb),3);
     }
