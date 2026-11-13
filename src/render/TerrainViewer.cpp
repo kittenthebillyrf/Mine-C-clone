@@ -946,6 +946,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     if(is_wood_stairs(stack.id)) {
                         mc::world::BlockState state{};
                         state.facing=static_cast<std::uint8_t>(horizontal_facing_from_yaw(yaw));
+                        // Looking at the underside of the support block places an upside-down stair.
+                        state.shape=(previous.y<by)?1u:0u;
                         world.set_block_state(bx,by,bz,state);
                     }
                     --stack.count;
