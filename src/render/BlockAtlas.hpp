@@ -1,5 +1,6 @@
 #pragma once
 #include "raylib.h"
+#include "raymath.h"
 #include "../world/Block.hpp"
 #include <string>
 #include <vector>
@@ -30,38 +31,75 @@ inline std::vector<unsigned char> decode_block_atlas_base64() {
     }
     return out;
 }
-inline Texture2D load_block_atlas() {
-    static Texture2D texture{};
+inline int block_atlas_tile(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    switch (id) {
+        case BlockId::Stone: return 0;
+        case BlockId::Grass: return 1;
+        case BlockId::Dirt: return 2;
+        case BlockId::Sand: return 3;
+        case BlockId::Water: return 4;
+        case BlockId::Bedrock: return 5;
+        case BlockId::Wood: return 6;
+        case BlockId::Leaves: return 7;
+        case BlockId::Gravel: return 8;
+        case BlockId::CoalOre: return 9;
+        case BlockId::IronOre: return 10;
+        default: return 0;
+    }
+}
+struct BlockAtlasAssets {
+    Texture2D texture{};
+    Material material{};
+    Mesh meshes[11]{};
+};
+inline BlockAtlasAssets& load_block_atlas() {
+    static BlockAtlasAssets assets{};
     static bool attempted = false;
     if (!attempted) {
         attempted = true;
         const auto bytes = decode_block_atlas_base64();
         Image image = LoadImageFromMemory(".png", bytes.data(), static_cast<int>(bytes.size()));
         if (image.data != nullptr) {
-            texture = LoadTextureFromImage(image);
+            assets.texture = LoadTextureFromImage(image);
             UnloadImage(image);
-            SetTextureFilter(texture, TEXTURE_FILTER_POINT);
+            SetTextureFilter(assets.texture, TEXTURE_FILTER_POINT);
+            assets.material = LoadMaterialDefault();
+            SetMaterialTexture(&assets.material, MATERIAL_MAP_DIFFUSE, assets.texture);
+            for (int tile = 0; tile < 11; ++tile) {
+                Mesh& mesh = assets.meshes[tile];
+                mesh = GenMeshCube(2.0f, 2.0f, 2.0f);
+                const float u0 = float(tile % 4) * 0.25f;
+                const float v0 = float(tile / 4) * 0.25f;
+                if (mesh.texcoords != nullptr) {
+                    for (int vertex = 0; vertex < mesh.vertexCount; ++vertex) {
+                        mesh.texcoords[vertex * 2] = u0 + mesh.texcoords[vertex * 2] * 0.25f;
+                        mesh.texcoords[vertex * 2 + 1] = v0 + mesh.texcoords[vertex * 2 + 1] * 0.25f;
+                    }
+                }
+                UploadMesh(&mesh, false);
+            }
         }
     }
-    return texture;
+    return assets;
 }
-inline Color block_atlas_tint(mc::world::BlockId id) { return id == mc::world::BlockId::Water ? Fade(WHITE, 0.68f) : WHITE; }\ninline Rectangle block_atlas_rect(mc::world::BlockId id) {
-    int tile = 0;
-    using mc::world::BlockId;
-    switch (id) {
-        case BlockId::Stone: tile = 0; break;
-        case BlockId::Grass: tile = 1; break;
-        case BlockId::Dirt: tile = 2; break;
-        case BlockId::Sand: tile = 3; break;
-        case BlockId::Water: tile = 4; break;
-        case BlockId::Bedrock: tile = 5; break;
-        case BlockId::Wood: tile = 6; break;
-        case BlockId::Leaves: tile = 7; break;
-        case BlockId::Gravel: tile = 8; break;
-        case BlockId::CoalOre: tile = 9; break;
-        case BlockId::IronOre: tile = 10; break;
-        default: tile = 0; break;
-    }
+inline bool draw_textured_block(BlockAtlasAssets& assets, mc::world::BlockId id, Vector3 center) {
+    const int tile = block_atlas_tile(id);
+    if (assets.texture.id == 0 || assets.meshes[tile].vertexCount == 0) return false;
+    assets.material.maps[MATERIAL_MAP_DIFFUSE].color =
+        id == mc::world::BlockId::Water ? Fade(WHITE, 0.68f) : WHITE;
+    DrawMesh(assets.meshes[tile], assets.material, MatrixTranslate(center.x, center.y, center.z));
+    return true;
+}
+inline Rectangle block_atlas_rect(mc::world::BlockId id) {
+    const int tile = block_atlas_tile(id);
     return Rectangle{float((tile % 4) * 16), float((tile / 4) * 16), 16.0f, 16.0f};
+}
+inline void unload_block_atlas(BlockAtlasAssets& assets) {
+    for (Mesh& mesh : assets.meshes) {
+        if (mesh.vertexCount > 0) UnloadMesh(mesh);
+    }
+    if (assets.texture.id != 0) UnloadTexture(assets.texture);
+}
 }
 }
