@@ -48,7 +48,7 @@ bool run_world_self_test() {
     mc::world::World generated;
     generator.generate_chunk(generated,0,0);
     if(generated.get_block(0,0,0)!=mc::world::BlockId::Bedrock) return false;
-    const auto surface=generated.get_block(0,column.height-1,0);
+    const auto surface=generated.get_block(0,column.height,0);
     if(surface!=mc::world::BlockId::Grass&&surface!=mc::world::BlockId::Sand) return false;
     return true;
 }
