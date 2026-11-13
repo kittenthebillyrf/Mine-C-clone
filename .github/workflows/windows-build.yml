@@ -10,10 +10,10 @@ on:
 permissions:
   contents: write
 
-# Serialize builds so concurrent runs cannot race while publishing the EXE.
 concurrency:
   group: windows-x64-main-build
   cancel-in-progress: false
+
 jobs:
   build:
     runs-on: windows-latest
@@ -25,14 +25,17 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
       - name: Test
+        id: tests
+        continue-on-error: true
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Package executable
+        if: always() && steps.Build.outcome == 'success'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build/Release/MineCppClone.exe dist/
       - name: Commit executable to main
-        if: github.ref == 'refs/heads/main'
+        if: always() && steps.Build.outcome == 'success' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           Copy-Item build/Release/MineCppClone.exe MineCppClone.exe -Force
@@ -45,8 +48,15 @@ jobs:
             git push origin HEAD:main
           }
       - name: Upload executable
+        if: always() && steps.Build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: MineCppClone-Windows-x64
           path: dist/MineCppClone.exe
           if-no-files-found: error
+      - name: Report test status
+        if: always() && steps.tests.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Host "Windows executable was built and uploaded, but one or more tests failed."
+          exit 1
