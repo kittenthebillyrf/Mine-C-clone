@@ -710,10 +710,10 @@ bool save_world_file(const mc::world::World& world,
         output << "MCCPLAYER 1\n" << std::setprecision(17)
                << px << ' ' << py << ' ' << pz << ' '
                << motionX << ' ' << motionY << ' ' << motionZ << ' '
-               << yaw << ' ' << pitch << ' ' << selected << '\\n';
+               << yaw << ' ' << pitch << ' ' << selected << '\n';
         for(int i=0;i<INVENTORY_SIZE;++i)
             output << static_cast<unsigned int>(inventory[i].id) << ' '
-                   << inventory[i].count << '\\n';
+                   << inventory[i].count << '\n';
         output.flush();
         if(!output) return false;
     }
