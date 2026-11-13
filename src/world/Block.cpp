@@ -40,7 +40,8 @@ const BlockInfo& block_info(BlockId id) {
         {BlockId::CraftingTable,"crafting_table",true},
         {BlockId::Furnace,"furnace",true},
         {BlockId::OakSlab,"oak_slab",true},
-        {BlockId::OakFence,"oak_fence",true}
+        {BlockId::OakFence,"oak_fence",true},
+        {BlockId::Lava,"lava",false}
     }};
     const auto raw=static_cast<std::uint16_t>(id);
     return blocks[raw<blocks.size()?raw:0];
