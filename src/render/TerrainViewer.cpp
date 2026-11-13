@@ -142,7 +142,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     ensure_chunks(size/2,size/2);
 
     InitWindow(1280,720,"Mine C++ Clone");
-    const Texture2D blockAtlas = load_block_atlas();
+    BlockAtlasAssets& blockAtlas = load_block_atlas();
 #ifdef __SWITCH__
     SetTargetFPS(60);
     constexpr int renderRadius=7;
@@ -205,8 +205,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     const int top=surface_y(world,x,z);
                     for(int y=std::max(0,top-5);y<top;++y) {
                         const BlockId id=world.get_block(x,y,z);
-                        if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air))
-                            if (IsTextureReady(blockAtlas)) DrawCubeTextureRec(blockAtlas,block_atlas_rect(id),block_center(x,y,z),BLOCK,BLOCK,BLOCK,block_atlas_tint(id));\n                            else if (IsTextureReady(blockAtlas)) DrawCubeTextureRec(blockAtlas,block_atlas_rect(id),block_center(x,y,z),BLOCK,BLOCK,BLOCK,block_atlas_tint(id));\n                else DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
+                        if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air)) {
+                            const Vector3 center = block_center(x,y,z);
+                            if (!draw_textured_block(blockAtlas,id,center)) DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
+                        }
                     }
                 }
             }
@@ -407,7 +409,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
                    world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
-                DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
+                { const Vector3 center = block_center(x,y,z); if (!draw_textured_block(blockAtlas,id,center)) DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); }
             }
         }
         EndMode3D();
@@ -422,7 +424,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const ItemStack& stack=inventory[i];
             DrawRectangle(barX+i*barW,barY,48,56,Fade(BLACK,0.72f));
             DrawRectangleLines(barX+i*barW,barY,48,56,i==selected?YELLOW:GRAY);
-            if(stack.count>0) { if(IsTextureReady(blockAtlas)) DrawTexturePro(blockAtlas,block_atlas_rect(stack.id),Rectangle{float(barX+i*barW+10),float(barY+13),28,28},Vector2{0,0},0.0f,WHITE); else DrawRectangle(barX+i*barW+10,barY+13,28,28,color_for(stack.id)); }
+            if(stack.count>0) { if((blockAtlas.texture.id != 0)) DrawTexturePro(blockAtlas.texture,block_atlas_rect(stack.id),Rectangle{float(barX+i*barW+10),float(barY+13),28,28},Vector2{0,0},0.0f,WHITE); else DrawRectangle(barX+i*barW+10,barY+13,28,28,color_for(stack.id)); }
             DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,11,RAYWHITE);
             if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
@@ -450,7 +452,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawRectangle(sx,sy,48,50,Fade(BLACK,0.7f));
                 DrawRectangleLines(sx,sy,48,50,i==selected?YELLOW:GRAY);
                 if(inventory[i].count>0) {
-                    if(IsTextureReady(blockAtlas)) DrawTexturePro(blockAtlas,block_atlas_rect(inventory[i].id),Rectangle{float(sx+10),float(sy+8),28,28},Vector2{0,0},0.0f,WHITE); else DrawRectangle(sx+10,sy+8,28,28,color_for(inventory[i].id));
+                    if((blockAtlas.texture.id != 0)) DrawTexturePro(blockAtlas.texture,block_atlas_rect(inventory[i].id),Rectangle{float(sx+10),float(sy+8),28,28},Vector2{0,0},0.0f,WHITE); else DrawRectangle(sx+10,sy+8,28,28,color_for(inventory[i].id));
                     DrawText(TextFormat("%i",inventory[i].count),sx+27,sy+34,12,RAYWHITE);
                 }
             }
@@ -464,6 +466,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     }
     { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
     EnableCursor();
+    unload_block_atlas(blockAtlas);
     CloseWindow();
     return 0;
 }
