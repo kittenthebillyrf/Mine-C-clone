@@ -28,6 +28,7 @@ The game opens on a Java 1.12-era inspired main menu with a slowly rotating 3D v
 ## Implemented
 
 - First-person camera, walking, running and jumping.
+- Cached 16×16×16 chunk-section meshes for full cube terrain, greedy face merging, atlas UVs and neighbor-revision invalidation; partial/transparent blocks remain on the model path.
 - Seeded terrain with grass, dirt, stone, sand, bedrock and water.
 - Block targeting, breaking and placement.
 - 9-slot hotbar, 36-slot inventory, stack limit of 64.
@@ -58,9 +59,9 @@ ctest --test-dir build -C Release --output-on-failure
 ## Next milestones
 
 1. Reliable voxel collision and block-face targeting
-2. Chunk mesh generation and distance-based chunk streaming
+2. Distance-based chunk streaming, atlas-safe repeated UVs and partial-block mesh batching
 3. Survival/creative modes, health, hunger and crafting
 4. Caves, ores and structures
 5. Cross-platform multiplayer
 
-This is an early playable prototype, not a complete Minecraft 1.12.2 recreation. Player collision uses an axis-separated AABB solver with partial shapes for slabs, stairs and fences, but still needs in-game regression testing. Full crafting, mobs and multiplayer are not implemented.
+This is an early playable prototype, not a complete Minecraft 1.12.2 recreation. Player collision uses a swept, axis-separated AABB solver with partial shapes for slabs, stairs and fences, but still needs in-game regression testing. Full crafting, mobs and multiplayer are not implemented. Chunk meshing is now connected to the runtime renderer for full cubes; atlas textures on merged faces are currently stretched across merged quads, and partial/transparent geometry still uses the individual model path.
