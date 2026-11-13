@@ -51,6 +51,9 @@ bool run_world_self_test() {
     if(restored.get_block(0,10,0)!=mc::world::BlockId::Stone) return false;
     std::filesystem::remove_all(chunkDir,fileError);
     if(!mc::world::block_info(mc::world::BlockId::Stone).solid) return false;
+    if(!mc::world::block_info(mc::world::BlockId::Planks).solid) return false;
+    if(mc::world::block_info(mc::world::BlockId::Stick).solid) return false;
+    if(!mc::world::block_info(mc::world::BlockId::CraftingTable).solid) return false;
 
     const mc::world::generation::ChunkGenerator generator(1122);
     const auto column=generator.sample(0,0);
