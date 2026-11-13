@@ -2,6 +2,7 @@
 #include "world/World.hpp"
 #include "world/WorldGen112.hpp"
 #include "render/TerrainViewer.hpp"
+#include "assets/Json.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -46,6 +47,22 @@ std::string replace_all(std::string value, const std::string& token, const std::
         pos += replacement.size();
     }
     return value;
+}
+bool run_json_self_test() {
+    const auto parsed=mc::assets::json::parse(R"({"parent":"block/cube","elements":[{"from":[0,0,0],"to":[16,16,16]}],"ambientocclusion":false,"scale":[1.0,0.5,1e0],"unicode":"\\u041c\\u0430\\u0439\\u043d"})");
+    if(!parsed||!parsed.value.is_object())return false;
+    const auto* parent=parsed.value.get("parent");const auto* elements=parsed.value.get("elements");
+    const auto* ao=parsed.value.get("ambientocclusion");const auto* scale=parsed.value.get("scale");const auto* unicode=parsed.value.get("unicode");
+    if(!parent||!parent->string()||*parent->string()!="block/cube")return false;
+    if(!elements||!elements->array()||elements->array()->size()!=1)return false;
+    const auto* from=elements->at(0)->get("from");
+    if(!from||!from->array()||!from->at(2)->number()||*from->at(2)->number()!=0.0)return false;
+    if(!ao||!ao->boolean()||*ao->boolean())return false;
+    if(!scale||!scale->at(1)->number()||std::abs(*scale->at(1)->number()-0.5)>1e-12)return false;
+    if(!unicode||!unicode->string()||*unicode->string()!="Майн")return false;
+    return !mc::assets::json::parse(R"({"bad":01})") &&
+           !mc::assets::json::parse(R"({"x":1,"x":2})") &&
+           !mc::assets::json::parse("[1,]");
 }
 bool run_world_self_test() {
     // java.util.Random reference values for seed 0.
