@@ -274,12 +274,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw-=md.x*0.0025f;
-            pitch=std::clamp(pitch-md.y*0.0025f,-1.45f,1.45f);
+            pitch=std::clamp(pitch+md.y*0.0025f,-1.45f,1.45f);
             if(gamepad) {
                 const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
                 const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
                 if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f*controlDt;
-                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch-lookY*2.0f*controlDt,-1.45f,1.45f);
+                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f*controlDt,-1.45f,1.45f);
             }
         }
 
