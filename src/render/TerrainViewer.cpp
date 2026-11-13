@@ -1043,7 +1043,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
     std::unordered_map<std::uint64_t,RuntimeChunkMesh> runtimeChunkMeshes;
-    runtimeChunkMeshes.reserve(512);
+    // At the largest supported view distance the camera can retain roughly
+    // (2R+3)^2 chunks across up to four visible vertical sections. Reserve
+    // that working set up front so exploration does not trigger repeated
+    // bucket-array reallocations and full hash-table rehashes mid-frame.
+    const std::size_t visibleChunkSide=std::size_t(renderDistanceChunks*2+3);
+    runtimeChunkMeshes.reserve(visibleChunkSide*visibleChunkSide*4u);
 #if defined(__SWITCH__)
     // NROs do not expose romfs paths until the filesystem is mounted.
     romfsInit();
@@ -1174,8 +1179,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float dt=std::min(GetFrameTime(),0.10f);
         // Stream nearby 16x16 chunks; the full 4096x4096 map is never
         // allocated in RAM. Distant chunks are paged to disk sidecars.
-        const int playerChunkX=std::clamp(int(std::floor(px))/Chunk::Width,0,chunksWide-1);
-        const int playerChunkZ=std::clamp(int(std::floor(pz))/Chunk::Depth,0,chunksWide-1);
+        const int playerChunkX=std::clamp(int(std::floor(px/float(Chunk::Width))),0,chunksWide-1);
+        const int playerChunkZ=std::clamp(int(std::floor(pz/float(Chunk::Depth))),0,chunksWide-1);
         const int activeChunkRadius=std::clamp(renderDistanceChunks+1,3,17);
         int generatedChunksThisFrame=0;
         for(int ring=0;ring<=activeChunkRadius && generatedChunksThisFrame<chunkBuildsPerFrame;++ring) {
@@ -1586,8 +1591,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             // Visit chunk coordinates in expanding square rings around the player.
             // This naturally prioritizes nearby chunks and avoids allocating,
             // filling and sorting a candidate vector on every rendered frame.
-            const int playerChunkX=int(std::floor(px))/Chunk::Width;
-            const int playerChunkZ=int(std::floor(pz))/Chunk::Depth;
+            const int playerChunkX=int(std::floor(px/float(Chunk::Width)));
+            const int playerChunkZ=int(std::floor(pz/float(Chunk::Depth)));
             const int maxRing=std::max({
                 std::abs(firstChunkX-playerChunkX),std::abs(lastChunkX-playerChunkX),
                 std::abs(firstChunkZ-playerChunkZ),std::abs(lastChunkZ-playerChunkZ)});
