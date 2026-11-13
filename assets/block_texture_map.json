@@ -1,0 +1,397 @@
+{
+  "version": "Minecraft Java 1.12.2",
+  "atlas": "assets/blocks_atlas_1_12.png",
+  "columns": 16,
+  "tile_size": 16,
+  "blocks": {
+    "1": {
+      "name": "stone",
+      "texture": "stone.png"
+    },
+    "2": {
+      "name": "dirt",
+      "texture": "dirt.png"
+    },
+    "3": {
+      "name": "grass",
+      "texture": "grass_top.png"
+    },
+    "4": {
+      "name": "sand",
+      "texture": "sand.png"
+    },
+    "5": {
+      "name": "water",
+      "texture": "water_still.png"
+    },
+    "6": {
+      "name": "bedrock",
+      "texture": "bedrock.png"
+    },
+    "7": {
+      "name": "cobblestone",
+      "texture": "cobblestone.png"
+    },
+    "8": {
+      "name": "oak_planks",
+      "texture": "planks_oak.png"
+    },
+    "9": {
+      "name": "oak_log",
+      "texture": "log_oak.png"
+    },
+    "10": {
+      "name": "oak_leaves",
+      "texture": "leaves_oak.png"
+    },
+    "11": {
+      "name": "gravel",
+      "texture": "gravel.png"
+    },
+    "12": {
+      "name": "sandstone",
+      "texture": "sandstone_top.png"
+    },
+    "13": {
+      "name": "glass",
+      "texture": "glass.png"
+    },
+    "14": {
+      "name": "bricks",
+      "texture": "brick.png"
+    },
+    "15": {
+      "name": "clay",
+      "texture": "clay.png"
+    },
+    "16": {
+      "name": "coal_ore",
+      "texture": "coal_ore.png"
+    },
+    "17": {
+      "name": "iron_ore",
+      "texture": "iron_ore.png"
+    },
+    "18": {
+      "name": "gold_ore",
+      "texture": "gold_ore.png"
+    },
+    "19": {
+      "name": "diamond_ore",
+      "texture": "diamond_ore.png"
+    },
+    "20": {
+      "name": "redstone_ore",
+      "texture": "redstone_ore.png"
+    },
+    "21": {
+      "name": "lapis_ore",
+      "texture": "lapis_ore.png"
+    },
+    "22": {
+      "name": "emerald_ore",
+      "texture": "emerald_ore.png"
+    },
+    "23": {
+      "name": "obsidian",
+      "texture": "obsidian.png"
+    },
+    "24": {
+      "name": "snow",
+      "texture": "snow.png"
+    },
+    "25": {
+      "name": "ice",
+      "texture": "ice.png"
+    },
+    "26": {
+      "name": "cactus",
+      "texture": "cactus_side.png"
+    },
+    "27": {
+      "name": "bookshelf",
+      "texture": "bookshelf.png"
+    },
+    "28": {
+      "name": "white_wool",
+      "texture": "wool_colored_white.png"
+    },
+    "29": {
+      "name": "netherrack",
+      "texture": "netherrack.png"
+    },
+    "30": {
+      "name": "glowstone",
+      "texture": "glowstone.png"
+    },
+    "31": {
+      "name": "mossy_cobblestone",
+      "texture": "cobblestone_mossy.png"
+    },
+    "32": {
+      "name": "pumpkin",
+      "texture": "pumpkin_side.png"
+    },
+    "33": {
+      "name": "crafting_table",
+      "texture": "crafting_table_top.png"
+    },
+    "34": {
+      "name": "furnace",
+      "texture": "furnace_side.png"
+    },
+    "35": {
+      "name": "oak_slab",
+      "texture": "planks_oak.png"
+    },
+    "36": {
+      "name": "oak_fence",
+      "texture": "planks_oak.png"
+    },
+    "37": {
+      "name": "lava",
+      "texture": "lava_still.png"
+    },
+    "38": {
+      "name": "spruce_planks",
+      "texture": "planks_spruce.png"
+    },
+    "39": {
+      "name": "birch_planks",
+      "texture": "planks_birch.png"
+    },
+    "40": {
+      "name": "jungle_planks",
+      "texture": "planks_jungle.png"
+    },
+    "41": {
+      "name": "acacia_planks",
+      "texture": "planks_acacia.png"
+    },
+    "42": {
+      "name": "dark_oak_planks",
+      "texture": "planks_big_oak.png"
+    },
+    "43": {
+      "name": "spruce_log",
+      "texture": "log_spruce.png"
+    },
+    "44": {
+      "name": "birch_log",
+      "texture": "log_birch.png"
+    },
+    "45": {
+      "name": "jungle_log",
+      "texture": "log_jungle.png"
+    },
+    "46": {
+      "name": "acacia_log",
+      "texture": "log_acacia.png"
+    },
+    "47": {
+      "name": "dark_oak_log",
+      "texture": "log_big_oak.png"
+    },
+    "48": {
+      "name": "spruce_leaves",
+      "texture": "leaves_spruce.png"
+    },
+    "49": {
+      "name": "birch_leaves",
+      "texture": "leaves_birch.png"
+    },
+    "50": {
+      "name": "jungle_leaves",
+      "texture": "leaves_jungle.png"
+    },
+    "51": {
+      "name": "acacia_leaves",
+      "texture": "leaves_acacia.png"
+    },
+    "52": {
+      "name": "dark_oak_leaves",
+      "texture": "leaves_big_oak.png"
+    },
+    "53": {
+      "name": "granite",
+      "texture": "stone_granite.png"
+    },
+    "54": {
+      "name": "polished_granite",
+      "texture": "stone_granite_smooth.png"
+    },
+    "55": {
+      "name": "diorite",
+      "texture": "stone_diorite.png"
+    },
+    "56": {
+      "name": "polished_diorite",
+      "texture": "stone_diorite_smooth.png"
+    },
+    "57": {
+      "name": "andesite",
+      "texture": "stone_andesite.png"
+    },
+    "58": {
+      "name": "polished_andesite",
+      "texture": "stone_andesite_smooth.png"
+    },
+    "59": {
+      "name": "stone_bricks",
+      "texture": "stonebrick.png"
+    },
+    "60": {
+      "name": "mossy_stone_bricks",
+      "texture": "stonebrick_mossy.png"
+    },
+    "61": {
+      "name": "cracked_stone_bricks",
+      "texture": "stonebrick_cracked.png"
+    },
+    "62": {
+      "name": "chiseled_stone_bricks",
+      "texture": "stonebrick_carved.png"
+    },
+    "63": {
+      "name": "sponge",
+      "texture": "sponge.png"
+    },
+    "64": {
+      "name": "wet_sponge",
+      "texture": "sponge_wet.png"
+    },
+    "65": {
+      "name": "prismarine",
+      "texture": "prismarine_rough.png"
+    },
+    "66": {
+      "name": "prismarine_bricks",
+      "texture": "prismarine_bricks.png"
+    },
+    "67": {
+      "name": "dark_prismarine",
+      "texture": "prismarine_dark.png"
+    },
+    "68": {
+      "name": "sea_lantern",
+      "texture": "sea_lantern.png"
+    },
+    "69": {
+      "name": "end_stone",
+      "texture": "end_stone.png"
+    },
+    "70": {
+      "name": "end_bricks",
+      "texture": "end_bricks.png"
+    },
+    "71": {
+      "name": "purpur_block",
+      "texture": "purpur_block.png"
+    },
+    "72": {
+      "name": "purpur_pillar",
+      "texture": "purpur_pillar.png"
+    },
+    "73": {
+      "name": "quartz_block",
+      "texture": "quartz_block_side.png"
+    },
+    "74": {
+      "name": "chiseled_quartz",
+      "texture": "quartz_block_chiseled.png"
+    },
+    "75": {
+      "name": "quartz_pillar",
+      "texture": "quartz_block_lines.png"
+    },
+    "76": {
+      "name": "nether_quartz_ore",
+      "texture": "quartz_ore.png"
+    },
+    "77": {
+      "name": "redstone_lamp",
+      "texture": "redstone_lamp_off.png"
+    },
+    "78": {
+      "name": "hay_bale",
+      "texture": "hay_block_side.png"
+    },
+    "79": {
+      "name": "melon",
+      "texture": "melon_side.png"
+    },
+    "80": {
+      "name": "lit_pumpkin",
+      "texture": "pumpkin_face_on.png"
+    },
+    "81": {
+      "name": "terracotta",
+      "texture": "hardened_clay.png"
+    },
+    "82": {
+      "name": "white_concrete",
+      "texture": "concrete_white.png"
+    },
+    "83": {
+      "name": "orange_concrete",
+      "texture": "concrete_orange.png"
+    },
+    "84": {
+      "name": "magenta_concrete",
+      "texture": "concrete_magenta.png"
+    },
+    "85": {
+      "name": "light_blue_concrete",
+      "texture": "concrete_light_blue.png"
+    },
+    "86": {
+      "name": "yellow_concrete",
+      "texture": "concrete_yellow.png"
+    },
+    "87": {
+      "name": "lime_concrete",
+      "texture": "concrete_lime.png"
+    },
+    "88": {
+      "name": "pink_concrete",
+      "texture": "concrete_pink.png"
+    },
+    "89": {
+      "name": "gray_concrete",
+      "texture": "concrete_gray.png"
+    },
+    "90": {
+      "name": "light_gray_concrete",
+      "texture": "concrete_silver.png"
+    },
+    "91": {
+      "name": "cyan_concrete",
+      "texture": "concrete_cyan.png"
+    },
+    "92": {
+      "name": "purple_concrete",
+      "texture": "concrete_purple.png"
+    },
+    "93": {
+      "name": "blue_concrete",
+      "texture": "concrete_blue.png"
+    },
+    "94": {
+      "name": "brown_concrete",
+      "texture": "concrete_brown.png"
+    },
+    "95": {
+      "name": "green_concrete",
+      "texture": "concrete_green.png"
+    },
+    "96": {
+      "name": "red_concrete",
+      "texture": "concrete_red.png"
+    },
+    "97": {
+      "name": "black_concrete",
+      "texture": "concrete_black.png"
+    }
+  },
+  "source_texture_count": 478
+}
