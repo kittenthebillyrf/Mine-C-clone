@@ -152,9 +152,35 @@ Color color_for(mc::world::BlockId id) {
         default:return BLANK;
     }
 }
+mc::world::BlockId wood_planks_for(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    switch(id) {
+        case BlockId::OakSlab: case BlockId::OakFence: case BlockId::OakStairs: return BlockId::OakPlanks;
+        case BlockId::SpruceSlab: case BlockId::SpruceFence: case BlockId::SpruceStairs: return BlockId::SprucePlanks;
+        case BlockId::BirchSlab: case BlockId::BirchFence: case BlockId::BirchStairs: return BlockId::BirchPlanks;
+        case BlockId::JungleSlab: case BlockId::JungleFence: case BlockId::JungleStairs: return BlockId::JunglePlanks;
+        case BlockId::AcaciaSlab: case BlockId::AcaciaFence: case BlockId::AcaciaStairs: return BlockId::AcaciaPlanks;
+        case BlockId::DarkOakSlab: case BlockId::DarkOakFence: case BlockId::DarkOakStairs: return BlockId::DarkOakPlanks;
+        default: return id;
+    }
+}
+bool is_wood_slab(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    return id==BlockId::OakSlab || id==BlockId::SpruceSlab || id==BlockId::BirchSlab ||
+           id==BlockId::JungleSlab || id==BlockId::AcaciaSlab || id==BlockId::DarkOakSlab;
+}
+bool is_wood_fence(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    return id==BlockId::OakFence || id==BlockId::SpruceFence || id==BlockId::BirchFence ||
+           id==BlockId::JungleFence || id==BlockId::AcaciaFence || id==BlockId::DarkOakFence;
+}
+bool is_wood_stairs(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    return id==BlockId::OakStairs || id==BlockId::SpruceStairs || id==BlockId::BirchStairs ||
+           id==BlockId::JungleStairs || id==BlockId::AcaciaStairs || id==BlockId::DarkOakStairs;
+}
 int texture_slot(mc::world::BlockId id) {
-    if(id==mc::world::BlockId::OakStairs) return static_cast<int>(mc::world::BlockId::OakPlanks);
-    const int slot=static_cast<int>(id);
+    const int slot=static_cast<int>(wood_planks_for(id));
     return (slot>0 && slot<static_cast<int>(mc::world::BLOCK_ID_COUNT))?slot:-1;
 }
 int face_texture_slot(mc::world::BlockId id,Vector3 normal) {
@@ -177,7 +203,7 @@ int face_texture_slot(mc::world::BlockId id,Vector3 normal) {
 Model make_block_model(mc::world::BlockId id,Texture2D texture) {
     if(texture_slot(id)<0 || texture.id==0) return Model{};
     // Oak slabs are lower-half blocks in the default 1.12 state (half=bottom).
-    const bool lowerSlab=id==mc::world::BlockId::OakSlab;
+    const bool lowerSlab=is_wood_slab(id);
     // Vanilla cactus has a one-pixel inset on all four horizontal sides.
     const float horizontalSize=id==mc::world::BlockId::Cactus?BLOCK*0.875f:BLOCK;
     Mesh mesh=GenMeshCube(horizontalSize,lowerSlab?BLOCK*0.5f:BLOCK,horizontalSize);
@@ -210,9 +236,9 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
         DrawSphere(Vector3{center.x,center.y+BLOCK*0.12f,center.z},0.22f,Color{255,170,55,28});
         return;
     }
-    if(id==mc::world::BlockId::OakStairs && models[static_cast<unsigned int>(mc::world::BlockId::OakPlanks)].meshCount>0) {
+    if(is_wood_stairs(id) && models[static_cast<unsigned int>(wood_planks_for(id))].meshCount>0) {
         // Default stair state: lower full-width tread and an upper rear half-step.
-        const Model& plank=models[static_cast<unsigned int>(mc::world::BlockId::OakPlanks)];
+        const Model& plank=models[static_cast<unsigned int>(wood_planks_for(id))];
         DrawModelEx(plank,Vector3{center.x,center.y-BLOCK*0.25f,center.z},
                     Vector3{0,1,0},0.0f,Vector3{1.0f,0.5f,1.0f},WHITE);
         DrawModelEx(plank,Vector3{center.x,center.y+BLOCK*0.25f,center.z+BLOCK*0.25f},
@@ -223,10 +249,9 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
         DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
     }
     if(index<mc::world::BLOCK_ID_COUNT && models[index].meshCount>0) {
-        if(id==mc::world::BlockId::OakFence) {
-            // Vanilla 1.12 fence silhouette: narrow central post plus two rails
-            // on each horizontal axis. All pieces reuse the atlas-backed plank model.
-            const Model& fence=models[index];
+        if(is_wood_fence(id)) {
+            // Default connected-fence silhouette; all pieces use this wood species' plank texture.
+            const Model& fence=models[static_cast<unsigned int>(wood_planks_for(id))];
             DrawModelEx(fence,center,Vector3{0,1,0},0.0f,Vector3{0.25f,1.0f,0.25f},WHITE);
             for(float y : {-0.35f,0.35f}) {
                 DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
@@ -237,7 +262,7 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
             return;
         }
         Vector3 modelCenter=center;
-        if(id==mc::world::BlockId::OakSlab) modelCenter.y-=BLOCK*0.25f;
+        if(is_wood_slab(id)) modelCenter.y-=BLOCK*0.25f;
         DrawModel(models[index],modelCenter,1.0f,WHITE);
     } else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
