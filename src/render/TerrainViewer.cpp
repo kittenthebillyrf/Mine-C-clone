@@ -4,6 +4,7 @@
 #include "../world/World.hpp"
 #include "../world/WorldGen112.hpp"
 #include "../physics/PlayerPhysics.hpp"
+#include "ChunkMesh.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -251,6 +252,67 @@ Model make_block_model(mc::world::BlockId id,Texture2D texture) {
         model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
     return model;
 }
+
+Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
+    if(data.empty() || texture.id==0) return Model{};
+    Mesh mesh{};
+    mesh.vertexCount=static_cast<int>(data.vertices.size());
+    mesh.triangleCount=static_cast<int>(data.indices.size()/3);
+    mesh.vertices=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*3));
+    mesh.normals=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*3));
+    mesh.texcoords=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*2));
+    mesh.indices=static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short)*data.indices.size()));
+    if(!mesh.vertices||!mesh.normals||!mesh.texcoords||!mesh.indices) {
+        if(mesh.vertices)MemFree(mesh.vertices);if(mesh.normals)MemFree(mesh.normals);
+        if(mesh.texcoords)MemFree(mesh.texcoords);if(mesh.indices)MemFree(mesh.indices);
+        return Model{};
+    }
+    for(std::size_t face=0;face+3<data.vertices.size();face+=4) {
+        const auto& first=data.vertices[face];
+        const Vector3 normal{first.nx,first.ny,first.nz};
+        const int slot=std::clamp(face_texture_slot(static_cast<mc::world::BlockId>(first.block_id),normal),0,127);
+        const float tileX=float(slot%16),tileY=float(slot/16);
+        float minU=1e30f,maxU=-1e30f,minV=1e30f,maxV=-1e30f;
+        auto raw_uv=[&](const ChunkMeshVertex& vertex) {
+            if(std::abs(normal.x)>0.5f) return Vector2{vertex.z,vertex.y};
+            if(std::abs(normal.y)>0.5f) return Vector2{vertex.x,vertex.z};
+            return Vector2{vertex.x,vertex.y};
+        };
+        for(std::size_t k=0;k<4;++k) {
+            const Vector2 uv=raw_uv(data.vertices[face+k]);
+            minU=std::min(minU,uv.x);maxU=std::max(maxU,uv.x);
+            minV=std::min(minV,uv.y);maxV=std::max(maxV,uv.y);
+        }
+        const float du=std::max(1e-6f,maxU-minU),dv=std::max(1e-6f,maxV-minV);
+        for(std::size_t k=0;k<4;++k) {
+            const std::size_t index=face+k;
+            const auto& vertex=data.vertices[index];
+            mesh.vertices[index*3+0]=vertex.x*BLOCK;
+            mesh.vertices[index*3+1]=vertex.y*BLOCK;
+            mesh.vertices[index*3+2]=vertex.z*BLOCK;
+            mesh.normals[index*3+0]=vertex.nx;
+            mesh.normals[index*3+1]=vertex.ny;
+            mesh.normals[index*3+2]=vertex.nz;
+            const Vector2 uv=raw_uv(vertex);
+            const float localU=(uv.x-minU)/du,localV=(uv.y-minV)/dv;
+            mesh.texcoords[index*2+0]=(tileX+0.001f+localU*0.998f)/16.0f;
+            mesh.texcoords[index*2+1]=(tileY+0.001f+localV*0.998f)/8.0f;
+        }
+    }
+    std::copy(data.indices.begin(),data.indices.end(),mesh.indices);
+    UploadMesh(&mesh,false);
+    Model model=LoadModelFromMesh(mesh);
+    if(model.materialCount>0) model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
+    return model;
+}
+bool is_chunk_mesh_block(mc::world::BlockId id) {
+    return ChunkMeshBuilder::is_full_cube_block(id);
+}
+struct RuntimeChunkMesh {
+    int x=0,z=0,section=0;
+    ChunkMeshData data;
+    Model model{};
+};
 bool fence_connects_to(mc::world::BlockId id) {
     using mc::world::BlockId;
     if(id==BlockId::Air || id==BlockId::Water || id==BlockId::Lava ||
@@ -705,6 +767,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     SetTargetFPS(120);
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
+    std::vector<RuntimeChunkMesh> runtimeChunkMeshes;
+    runtimeChunkMeshes.reserve(96);
     Image blockAtlas=LoadImage("assets/blocks_atlas_1_12.png");
     if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_atlas_1_12.png");
     Texture2D blockTexture={0};
@@ -1018,17 +1082,39 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BeginMode3D(camera);
         const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
         const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
-        for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
-            const int minY=std::max(0,int(py)-18),maxY=std::min(Chunk::Height,int(py)+22);
-            for(int y=minY;y<maxY;++y) {
+        const int minY=std::max(0,int(py)-18),maxY=std::min(Chunk::Height-1,int(py)+22);
+        if(blockTexture.id!=0) {
+            const int firstChunkX=minX/Chunk::Width,lastChunkX=maxX/Chunk::Width;
+            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=maxZ/Chunk::Depth;
+            const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
+            const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
+            for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx)
+                for(int section=firstSection;section<=lastSection;++section) {
+                    auto it=std::find_if(runtimeChunkMeshes.begin(),runtimeChunkMeshes.end(),
+                        [&](const RuntimeChunkMesh& entry){return entry.x==cx&&entry.z==cz&&entry.section==section;});
+                    if(it==runtimeChunkMeshes.end()) {
+                        runtimeChunkMeshes.push_back(RuntimeChunkMesh{});
+                        it=std::prev(runtimeChunkMeshes.end());
+                        it->x=cx;it->z=cz;it->section=section;
+                    }
+                    if(!it->data.is_current(world,cx,cz)) {
+                        if(it->model.meshCount>0) UnloadModel(it->model);
+                        it->data=ChunkMeshBuilder::build(world,cx,cz,section);
+                        it->model=make_chunk_model(it->data,blockTexture);
+                    }
+                    if(it->model.meshCount>0) DrawModel(it->model,Vector3{0,0,0},1.0f,WHITE);
+                }
+        }
+        for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x)
+            for(int y=minY;y<=maxY;++y) {
                 const BlockId id=world.get_block(x,y,z);
                 if(id==BlockId::Air) continue;
+                if(blockTexture.id!=0 && is_chunk_mesh_block(id)) continue;
                 if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
                    world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
                 draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
             }
-        }
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
@@ -1130,6 +1216,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(requestQuit) break;
     }
     if(!requestQuit) save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
+    for(auto& cached:runtimeChunkMeshes) if(cached.model.meshCount>0) UnloadModel(cached.model);
     for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) {
         if(blockModels[i].meshCount>0) {
             for(int material=0;material<blockModels[i].materialCount;++material)
