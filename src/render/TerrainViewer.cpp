@@ -1701,13 +1701,16 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         // One translucent draw per visible chunk section, rather than one
         // immediate-mode cube draw for every water voxel.
         BeginBlendMode(BLEND_ALPHA);
+        const float waterRadiusSq=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
+        const int waterFirstSection=minY/ChunkMeshBuilder::SectionHeight;
+        const int waterLastSection=maxY/ChunkMeshBuilder::SectionHeight;
         for(auto& entry:runtimeChunkMeshes) {
             const auto& cached=entry.second;
             if(cached.waterModel.meshCount==0) continue;
             const float dx=float(cached.x*Chunk::Width+8)-float(px);
             const float dz=float(cached.z*Chunk::Depth+8)-float(pz);
-            if(dx*dx+dz*dz>renderRadiusSq) continue;
-            if(cached.section<firstSection||cached.section>lastSection) continue;
+            if(dx*dx+dz*dz>waterRadiusSq) continue;
+            if(cached.section<waterFirstSection||cached.section>waterLastSection) continue;
             if(section_in_frustum(camera,cached.x,cached.z,cached.section,GetScreenWidth(),GetScreenHeight()))
                 DrawModel(cached.waterModel,Vector3{0,0,0},1.0f,WHITE);
         }
