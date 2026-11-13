@@ -16,11 +16,17 @@ bool Chunk::set(int x,int y,int z,BlockId block) {
     if(blocks_[i]!=block) {
         const BlockId previous=blocks_[i];
         const bool wasFalling=previous==BlockId::Sand||previous==BlockId::Gravel;
+        const bool wasSpecial=previous!=BlockId::Air&&!is_full_cube_block(previous);
         const bool isSpecial=block!=BlockId::Air&&!is_full_cube_block(block);
         const bool isFalling=block==BlockId::Sand||block==BlockId::Gravel;
         if(isSpecial&&!special_flags_.test(i)) {
             special_blocks_.push_back(i);
             special_flags_.set(i);
+        } else if(wasSpecial&&!isSpecial&&special_flags_.test(i)) {
+            special_flags_.reset(i);
+            const auto position=std::lower_bound(special_blocks_.begin(),special_blocks_.end(),i);
+            if(position!=special_blocks_.end()&&*position==i) special_blocks_.erase(position);
+            else special_blocks_.erase(std::remove(special_blocks_.begin(),special_blocks_.end(),i),special_blocks_.end());
         }
         if(wasFalling&&!isFalling)
             falling_blocks_.erase(std::remove(falling_blocks_.begin(),falling_blocks_.end(),i),falling_blocks_.end());
