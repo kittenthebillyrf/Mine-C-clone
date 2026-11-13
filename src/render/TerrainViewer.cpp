@@ -1116,6 +1116,21 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
                 draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
             }
+        if(blockTexture.id!=0) {
+            const int firstChunkX=minX/Chunk::Width,lastChunkX=maxX/Chunk::Width;
+            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=maxZ/Chunk::Depth;
+            const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
+            const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
+            for(auto it=runtimeChunkMeshes.begin();it!=runtimeChunkMeshes.end();) {
+                const bool visible=it->x>=firstChunkX&&it->x<=lastChunkX&&
+                    it->z>=firstChunkZ&&it->z<=lastChunkZ&&
+                    it->section>=firstSection&&it->section<=lastSection;
+                if(!visible) {
+                    if(it->model.meshCount>0)UnloadModel(it->model);
+                    it=runtimeChunkMeshes.erase(it);
+                } else ++it;
+            }
+        }
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
