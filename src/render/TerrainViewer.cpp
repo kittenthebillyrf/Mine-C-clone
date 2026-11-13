@@ -153,23 +153,13 @@ Color color_for(mc::world::BlockId id) {
     }
 }
 int texture_slot(mc::world::BlockId id) {
-    using mc::world::BlockId;
-    switch(id) {
-        case BlockId::Stone:return 0; case BlockId::Dirt:return 1;
-        case BlockId::Grass:return 2; case BlockId::Sand:return 3;
-        case BlockId::Bedrock:return 4; case BlockId::Cobblestone:return 5;
-        case BlockId::OakPlanks:return 6; case BlockId::OakLog:return 7;
-        case BlockId::OakLeaves:return 8; case BlockId::Gravel:return 9;
-        case BlockId::Sandstone:return 10; case BlockId::CoalOre:return 11;
-        case BlockId::IronOre:return 12; case BlockId::GoldOre:return 13;
-        case BlockId::DiamondOre:return 14; case BlockId::RedstoneOre:return 15;
-        default:return -1;
-    }
+    const int slot=static_cast<int>(id);
+    return (slot>0 && slot<static_cast<int>(mc::world::BLOCK_ID_COUNT))?slot:-1;
 }
 Model make_block_model(mc::world::BlockId id,const Image& atlas) {
     const int slot=texture_slot(id);
     if(slot<0 || !IsImageValid(atlas)) return Model{};
-    const Rectangle crop{float((slot%4)*16),float((slot/4)*16),16.0f,16.0f};
+    const Rectangle crop{float((slot%16)*16),float((slot/16)*16),16.0f,16.0f};
     Image image=ImageFromImage(atlas,crop);
     Texture2D texture=LoadTextureFromImage(image);
     UnloadImage(image);
@@ -532,16 +522,14 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     SetTargetFPS(120);
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
-    Image blockAtlas=LoadImage("assets/blocks_core_1_12.png");
-    if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_core_1_12.png");
-    const BlockId texturedBlocks[16]={
-        BlockId::Stone,BlockId::Dirt,BlockId::Grass,BlockId::Sand,
-        BlockId::Bedrock,BlockId::Cobblestone,BlockId::OakPlanks,BlockId::OakLog,
-        BlockId::OakLeaves,BlockId::Gravel,BlockId::Sandstone,BlockId::CoalOre,
-        BlockId::IronOre,BlockId::GoldOre,BlockId::DiamondOre,BlockId::RedstoneOre
-    };
-    for(const BlockId id:texturedBlocks)
-        blockModels[static_cast<unsigned int>(id)]=make_block_model(id,blockAtlas);
+    Image blockAtlas=LoadImage("assets/blocks_atlas_1_12.png");
+    if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_atlas_1_12.png");
+    if(IsImageValid(blockAtlas)) {
+        for(unsigned int raw=1;raw<BLOCK_ID_COUNT;++raw) {
+            const BlockId id=static_cast<BlockId>(raw);
+            blockModels[raw]=make_block_model(id,blockAtlas);
+        }
+    }
     if(IsImageValid(blockAtlas)) UnloadImage(blockAtlas);
     double px=double(size)*0.5,pz=double(size)*0.5;
     double py=double(surface_y(world,int(px),int(pz)));
