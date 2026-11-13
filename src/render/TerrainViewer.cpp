@@ -410,9 +410,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawText("Online and LAN multiplayer are not implemented yet",GetScreenWidth()/2-205,by+bh+22,17,RAYWHITE);
                 DrawText("This screen will be connected when networking is added",GetScreenWidth()/2-225,by+bh+50,15,RAYWHITE);
             } else {
-                DrawText(TextFormat("Device detected: %s",detectedDevice),GetScreenWidth()/2-140,by+bh+18,17,RAYWHITE);
-                DrawText(TextFormat("Recommended render distance: %i chunks",recommendedRenderDistance),GetScreenWidth()/2-190,by+bh+44,15,RAYWHITE);
-                DrawText("Apply the recommended profile in this menu",GetScreenWidth()/2-175,by+bh+68,15,LIGHTGRAY);
+                DrawText(TextFormat("Device detected: %s",deviceProfile.label),GetScreenWidth()/2-140,by+bh+18,17,RAYWHITE);
+                DrawText(TextFormat("Recommended render distance: %i chunks",deviceProfile.recommendedChunks),GetScreenWidth()/2-190,by+bh+44,15,RAYWHITE);
+                DrawText(TextFormat("Target FPS: %i",deviceProfile.targetFps),GetScreenWidth()/2-85,by+bh+68,15,LIGHTGRAY);
             }
             if(showDeviceProfile) {
                 const int sw=GetScreenWidth(),sh=GetScreenHeight();
