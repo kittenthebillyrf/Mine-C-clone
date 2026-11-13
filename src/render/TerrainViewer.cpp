@@ -186,6 +186,12 @@ int stair_facing(const mc::world::World& world,int x,int y,int z) {
     const auto* state=world.get_block_state(x,y,z);
     return state ? int(state->facing&3u) : 2;
 }
+int horizontal_facing_from_yaw(float yaw) {
+    // Minecraft-style cardinal facing from the player's horizontal look angle.
+    const float quarterTurns=yaw/(PI*0.5f);
+    const int direction=int(std::lround(quarterTurns));
+    return ((direction%4)+4)%4;
+}
 bool stair_upside_down(const mc::world::World& world,int x,int y,int z) {
     const auto* state=world.get_block_state(x,y,z);
     return state && (state->shape&1u)!=0;
@@ -936,7 +942,14 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const PlayerAabb playerBounds=player_box(px,py,pz);
                 const PlayerAabb targetBounds{double(bx),double(by),double(bz),double(bx+1),double(by+1),double(bz+1)};
                 const bool overlaps=intersects(playerBounds,targetBounds);
-                if(!overlaps&&world.set_block(bx,by,bz,stack.id)) --stack.count;
+                if(!overlaps&&world.set_block(bx,by,bz,stack.id)) {
+                    if(is_wood_stairs(stack.id)) {
+                        mc::world::BlockState state{};
+                        state.facing=static_cast<std::uint8_t>(horizontal_facing_from_yaw(yaw));
+                        world.set_block_state(bx,by,bz,state);
+                    }
+                    --stack.count;
+                }
             }
         }
 
