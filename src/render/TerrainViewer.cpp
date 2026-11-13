@@ -45,6 +45,46 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
+bool is_solid(const mc::world::World& world,int x,int y,int z) {
+    using mc::world::BlockId;
+    const BlockId id=world.get_block(x,y,z);
+    return id!=BlockId::Air && id!=BlockId::Water;
+}
+
+// Player coordinates use block units horizontally and world units vertically.
+bool player_collides(const mc::world::World& world,float px,float feetY,float pz) {
+    constexpr float radius=0.30f*BLOCK;
+    constexpr float height=1.80f*BLOCK;
+    constexpr float epsilon=0.025f;
+    const int minX=int(std::floor((px*BLOCK-radius)/BLOCK));
+    const int maxX=int(std::floor((px*BLOCK+radius)/BLOCK));
+    const int minY=int(std::floor((feetY+epsilon)/BLOCK));
+    const int maxY=int(std::floor((feetY+height-epsilon)/BLOCK));
+    const int minZ=int(std::floor((pz*BLOCK-radius)/BLOCK));
+    const int maxZ=int(std::floor((pz*BLOCK+radius)/BLOCK));
+    for(int y=minY;y<=maxY;++y)
+        for(int z=minZ;z<=maxZ;++z)
+            for(int x=minX;x<=maxX;++x)
+                if(is_solid(world,x,y,z)) return true;
+    return false;
+}
+
+bool player_in_water(const mc::world::World& world,float px,float feetY,float pz) {
+    constexpr float radius=0.28f*BLOCK;
+    constexpr float height=1.75f*BLOCK;
+    const int minX=int(std::floor((px*BLOCK-radius)/BLOCK));
+    const int maxX=int(std::floor((px*BLOCK+radius)/BLOCK));
+    const int minY=int(std::floor((feetY+0.05f)/BLOCK));
+    const int maxY=int(std::floor((feetY+height)/BLOCK));
+    const int minZ=int(std::floor((pz*BLOCK-radius)/BLOCK));
+    const int maxZ=int(std::floor((pz*BLOCK+radius)/BLOCK));
+    for(int y=minY;y<=maxY;++y)
+        for(int z=minZ;z<=maxZ;++z)
+            for(int x=minX;x<=maxX;++x)
+                if(world.get_block(x,y,z)==mc::world::BlockId::Water) return true;
+    return false;
+}
+
 bool add_item(ItemStack* inventory, mc::world::BlockId id) {
     // Merge into existing stacks before using an empty slot.
     for(int i=0;i<INVENTORY_SIZE;++i) {
@@ -228,6 +268,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             thirdPerson=!thirdPerson;
         }
         const float controlDt=(paused||inventoryOpen||creativeOpen)?0.0f:dt;
+        const bool crouching=IsKeyDown(KEY_LEFT_SHIFT);
+        const bool swimming=player_in_water(world,px,py,pz);
+
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw-=md.x*0.0025f;
@@ -236,9 +279,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
                 const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
                 if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f*controlDt;
-                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f*controlDt,-1.45f,1.45f);
+                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch-lookY*2.0f*controlDt,-1.45f,1.45f);
             }
         }
+
         const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
         const float rightX=std::cos(yaw),rightZ=std::sin(yaw);
         float mx=0,mz=0;
@@ -252,19 +296,43 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(std::abs(stickX)>0.16f) { mx+=rightX*stickX; mz+=rightZ*stickX; }
             if(std::abs(stickY)>0.16f) { mx-=forwardX*stickY; mz-=forwardZ*stickY; }
         }
-        const float len=std::sqrt(mx*mx+mz*mz);
-        if(len>0) { mx/=len; mz/=len; }
-        const bool crouching=IsKeyDown(KEY_LEFT_SHIFT);
-        const float speed=crouching?2.5f:6.0f;
-        const float nx=std::clamp(px+mx*speed*controlDt,1.0f,float(size-2));
-        const float nz=std::clamp(pz+mz*speed*controlDt,1.0f,float(size-2));
-        const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
-        const float ground=float(surface_y(world,groundX,groundZ))*BLOCK;
-        if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
-        if(captured && grounded && (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) { vy=10.5f; grounded=false; }
-        vy-=25.0f*controlDt; py+=vy*controlDt;
-        const float floorY=float(surface_y(world,int(px),int(pz)))*BLOCK;
-        if(py<=floorY) { py=floorY; vy=0; grounded=true; }
+        const float moveLength=std::sqrt(mx*mx+mz*mz);
+        if(moveLength>1.0f) { mx/=moveLength; mz/=moveLength; }
+
+        const float speed=swimming?2.35f:(crouching?2.5f:6.0f);
+        const float dx=mx*speed*controlDt;
+        const float dz=mz*speed*controlDt;
+        const float nextX=std::clamp(px+dx,1.0f,float(size-2));
+        if(!player_collides(world,nextX,py,pz)) px=nextX;
+        else if(grounded && !player_collides(world,nextX,py+BLOCK*0.6f,pz)) {
+            px=nextX; py+=BLOCK*0.6f;
+        }
+        const float nextZ=std::clamp(pz+dz,1.0f,float(size-2));
+        if(!player_collides(world,px,py,nextZ)) pz=nextZ;
+        else if(grounded && !player_collides(world,px,py+BLOCK*0.6f,nextZ)) {
+            pz=nextZ; py+=BLOCK*0.6f;
+        }
+
+        const bool nowSwimming=player_in_water(world,px,py,pz);
+        if(captured && grounded &&
+           (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) {
+            vy=nowSwimming?5.0f:10.5f;
+            grounded=false;
+        }
+        const float gravity=nowSwimming?6.0f:25.0f;
+        vy-=gravity*controlDt;
+        if(nowSwimming && captured && IsKeyDown(KEY_SPACE))
+            vy=std::min(vy+22.0f*controlDt,5.0f);
+        vy=std::max(vy,nowSwimming?-8.0f:-55.0f);
+        const float nextY=py+vy*controlDt;
+        if(player_collides(world,px,nextY,pz)) {
+            if(vy<0.0f) grounded=true;
+            vy=0.0f;
+        } else {
+            py=nextY;
+            grounded=false;
+        }
+        if(py<0.0f) { py=0.0f; vy=0.0f; grounded=true; }
 
         if(captured) {
             for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
