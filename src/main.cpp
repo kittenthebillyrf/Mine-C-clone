@@ -178,7 +178,8 @@ int main(int argc,char** argv) {
     }
     if(self_test) {
         if(!run_world_self_test()) { std::cerr<<"World core test failed\n"; return 2; }
-        std::cout<<"World core test passed\n";
+        if(!run_json_self_test() || !run_block_model_self_test()) { std::cerr<<"Resource model test failed\n"; return 3; }
+        std::cout<<"World core and resource model tests passed\n";
         return 0;
     }
     if(open_3d || !export_map) return mc::render::run_terrain_viewer(size,seed);
