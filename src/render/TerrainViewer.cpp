@@ -230,7 +230,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
         }
         // Bound RAM while retaining a safety ring around the active player.
-        while(world.chunk_count()>MAX_RESIDENT_CHUNKS && !residentOrder.empty()) {
+        std::size_t evictionAttempts=residentOrder.size();
+        while(world.chunk_count()>MAX_RESIDENT_CHUNKS && !residentOrder.empty() && evictionAttempts-->0) {
             const ChunkPos candidate=residentOrder.front();
             residentOrder.pop_front();
             const int centerX=int(px)/Chunk::Width,centerZ=int(pz)/Chunk::Depth;
