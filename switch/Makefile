@@ -13,7 +13,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 TARGET := MineCppClone
 BUILD := build
-SOURCES := ../src ../src/i18n ../src/world ../src/render
+SOURCES := ../src ../src/i18n ../src/world ../src/physics ../src/render
 DATA :=
 INCLUDES := ../src
 ROMFS := romfs
