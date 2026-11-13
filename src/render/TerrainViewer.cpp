@@ -945,8 +945,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
             if(IsKeyPressed(KEY_UP)) menuSelection=(menuSelection+count-1)%count;
             if(IsKeyPressed(KEY_DOWN)) menuSelection=(menuSelection+1)%count;
-            const bool menuConfirm=IsKeyPressed(KEY_ENTER)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
-            const bool menuBack=IsKeyPressed(KEY_ESCAPE)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+            const bool menuConfirm=IsKeyPressed(KEY_ENTER)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+            const bool menuBack=IsKeyPressed(KEY_ESCAPE)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
             const Vector2 mouse=GetMousePosition();
             for(int i=0;i<count;++i) {
                 const int y=by+i*(bh+gap);
@@ -987,9 +987,30 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(captured) DisableCursor(); else EnableCursor();
         }
         if(!paused && gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_LEFT)) {
+#if defined(__SWITCH__)
+            SwkbdConfig keyboard{};
+            char keyboardText[128]{};
+            if(R_SUCCEEDED(swkbdCreate(&keyboard,0))) {
+                swkbdConfigMakePresetDefault(&keyboard);
+                swkbdConfigSetGuideText(&keyboard,"Chat message or command");
+                if(R_SUCCEEDED(swkbdShow(&keyboard,keyboardText,sizeof(keyboardText)))) {
+                    chatInput=keyboardText;
+                    std::istringstream commandStream(chatInput);
+                    std::string command,arg;
+                    commandStream>>command>>arg;
+                    if(command=="/help") chatMessage="Commands: /help, /gamemode survival, /gamemode creative";
+                    else if(command=="/gamemode" && (arg=="creative"||arg=="survival")) {
+                        creativeMode=(arg=="creative");
+                        chatMessage=creativeMode?"Game mode set to Creative":"Game mode set to Survival";
+                    } else if(!chatInput.empty()) chatMessage="Unknown command: "+chatInput;
+                }
+                swkbdClose(&keyboard);
+            }
+#else
             chatOpen=!chatOpen; chatInput.clear();
             captured=!chatOpen;
             if(captured) DisableCursor(); else EnableCursor();
+#endif
         }
         if(!paused && IsKeyPressed(KEY_ENTER) && !chatOpen) {
             chatOpen=true; chatInput.clear(); captured=false; EnableCursor();
@@ -1017,11 +1038,14 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(paused) {
             constexpr int PAUSE_ACTIONS=4;
-            if(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)))
+            if(!pauseSettings && (IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))))
                 pauseSelection=(pauseSelection+PAUSE_ACTIONS-1)%PAUSE_ACTIONS;
-            if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)))
+            if(!pauseSettings && (IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))))
                 pauseSelection=(pauseSelection+1)%PAUSE_ACTIONS;
-            const bool confirm=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+            const bool confirm=!pauseSettings && (IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)));
+            if(!pauseSettings && gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
+                paused=false; captured=true; pauseSelection=0; DisableCursor();
+            }
             const Vector2 pauseMouse=GetMousePosition();
             const int menuW=360,menuH=48,menuGap=12;
             const int menuX=GetScreenWidth()/2-menuW/2;
@@ -1030,7 +1054,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const Rectangle item{float(menuX),float(menuY+i*(menuH+menuGap)),float(menuW),float(menuH)};
                 const bool hover=CheckCollisionPointRec(pauseMouse,item);
                 if(hover) pauseSelection=i;
-                if((hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))||(pauseSelection==i&&confirm)) {
+                if(!pauseSettings && ((hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))||(pauseSelection==i&&confirm))) {
                     if(i==0) {
                         paused=false; captured=true; DisableCursor(); pauseSelection=0;
                     } else if(i==1) {
@@ -1127,6 +1151,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
                 if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))
                     selected=(selected+1)%HOTBAR_SIZE;
+            }
+        }
+        if(inventoryOpen && gamepad) {
+            static int inventoryCursor=0;
+            if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT)) inventoryCursor=(inventoryCursor+INVENTORY_SIZE-1)%INVENTORY_SIZE;
+            if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) inventoryCursor=(inventoryCursor+1)%INVENTORY_SIZE;
+            if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)) inventoryCursor=(inventoryCursor+INVENTORY_SIZE-9)%INVENTORY_SIZE;
+            if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)) inventoryCursor=(inventoryCursor+9)%INVENTORY_SIZE;
+            if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) std::swap(inventory[selected],inventory[inventoryCursor]);
+            if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
+                inventoryOpen=false; captured=true; DisableCursor();
             }
         }
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1283,6 +1318,23 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(creativeOpen) {
             constexpr int PAGE_SIZE=48, GRID_COLS=8;
+            static int creativeSelection=0;
+            if(gamepad) {
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT)) creativeSelection=(creativeSelection+PAGE_SIZE-1)%PAGE_SIZE;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) creativeSelection=(creativeSelection+1)%PAGE_SIZE;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)) creativeSelection=(creativeSelection+PAGE_SIZE-GRID_COLS)%PAGE_SIZE;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)) creativeSelection=(creativeSelection+GRID_COLS)%PAGE_SIZE;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) { creativeOpen=false; captured=true; DisableCursor(); }
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) {
+                    const int raw=1+creativePage*PAGE_SIZE+creativeSelection;
+                    if(raw<int(BLOCK_ID_COUNT)) inventory[selected]={static_cast<BlockId>(raw),64};
+                    creativeOpen=false; captured=true; DisableCursor();
+                }
+            }
+            if(gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1))
+                creativePage=(creativePage+1)%std::max(1,(int(BLOCK_ID_COUNT)-1+PAGE_SIZE-1)/PAGE_SIZE);
+            if(gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1))
+                creativePage=(creativePage+std::max(1,(int(BLOCK_ID_COUNT)-1+PAGE_SIZE-1)/PAGE_SIZE)-1)%std::max(1,(int(BLOCK_ID_COUNT)-1+PAGE_SIZE-1)/PAGE_SIZE);
             const int totalPages=(int(BLOCK_ID_COUNT)-1+PAGE_SIZE-1)/PAGE_SIZE;
             const int panelW=704,panelH=470,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             creativePage=std::clamp(creativePage,0,totalPages-1);
@@ -1302,8 +1354,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const int sx=panelX+18+col*84,sy=panelY+54+row*56;
                 const Rectangle cell{float(sx),float(sy),78.0f,50.0f};
                 const bool hover=CheckCollisionPointRec(mouse,cell);
-                DrawRectangleRec(cell,hover?Color{90,90,96,255}:Color{58,58,64,255});
-                DrawRectangleLinesEx(cell,1,hover?YELLOW:GRAY);
+                const bool focused=gamepad && (i==creativeSelection);
+                DrawRectangleRec(cell,(hover||focused)?Color{90,90,96,255}:Color{58,58,64,255});
+                DrawRectangleLinesEx(cell,1,(hover||focused)?YELLOW:GRAY);
                 const BlockId id=static_cast<BlockId>(raw);
                 DrawRectangle(sx+5,sy+7,24,24,color_for(id));
                 const std::string label(block_info(id).name);
