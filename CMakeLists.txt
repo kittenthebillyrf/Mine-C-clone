@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(MineCppClone VERSION 0.4.0 LANGUAGES CXX)
+project(MineCppClone VERSION 0.5.0 LANGUAGES CXX)
 if(MSVC)
-  # Bundle the Microsoft C/C++ runtime into the executable.
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 set(CMAKE_CXX_STANDARD 20)
@@ -25,15 +24,23 @@ add_executable(MineCppClone
   src/world/Block.cpp
   src/world/Chunk.cpp
   src/world/World.cpp
+  src/world/WorldGen112.cpp
+  src/render/ChunkMesh.cpp
   src/render/TerrainViewer.cpp
 )
 target_include_directories(MineCppClone PRIVATE src)
 target_link_libraries(MineCppClone PRIVATE raylib)
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets")
+  file(COPY "${CMAKE_SOURCE_DIR}/assets" DESTINATION "${CMAKE_BINARY_DIR}")
+endif()
+
 if(MSVC)
   target_compile_options(MineCppClone PRIVATE /W4 /permissive- /utf-8)
 else()
   target_compile_options(MineCppClone PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
 enable_testing()
 add_test(NAME terrain_smoke_test COMMAND MineCppClone --map --size 32 --seed 1122 --output terrain_test.ppm --lang en)
 add_test(NAME localization_russian COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_ru.ppm --lang ru)
@@ -41,4 +48,4 @@ add_test(NAME localization_spanish COMMAND MineCppClone --map --size 16 --seed 1
 add_test(NAME localization_german COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_de.ppm --lang de)
 add_test(NAME localization_french COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_fr.ppm --lang fr)
 add_test(NAME localization_chinese COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_zh.ppm --lang zh_CN)
-add_test(NAME world_chunk_core COMMAND MineCppClone --self-test)
+add_test(NAME world_chunk_and_resource_models COMMAND MineCppClone --self-test)
