@@ -50,7 +50,7 @@ std::string replace_all(std::string value, const std::string& token, const std::
     return value;
 }
 bool run_json_self_test() {
-    const auto parsed=mc::assets::json::parse(R"({"parent":"block/cube","elements":[{"from":[0,0,0],"to":[16,16,16]}],"ambientocclusion":false,"scale":[1.0,0.5,1e0],"unicode":"\\u041c\\u0430\\u0439\\u043d"})");
+    const auto parsed=mc::assets::json::parse(R"({"parent":"block/cube","elements":[{"from":[0,0,0],"to":[16,16,16]}],"ambientocclusion":false,"scale":[1.0,0.5,1e0],"unicode":"\u041c\u0430\u0439\u043d"})");
     if(!parsed||!parsed.value.is_object())return false;
     const auto* parent=parsed.value.get("parent");const auto* elements=parsed.value.get("elements");
     const auto* ao=parsed.value.get("ambientocclusion");const auto* scale=parsed.value.get("scale");const auto* unicode=parsed.value.get("unicode");
