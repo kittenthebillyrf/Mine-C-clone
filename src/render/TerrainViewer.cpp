@@ -285,10 +285,16 @@ Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
     // Greedy meshing removes hidden faces, but a large quad must still repeat
     // its 16x16 tile once per block. Expand only the visible greedy quads into
     // per-block UV tiles; geometry remains in one GPU mesh/draw call.
-    std::vector<ChunkMeshVertex> tiled;
-    std::vector<std::uint16_t> tiledIndices;
-    tiled.reserve(data.vertices.size()*2);
-    tiledIndices.reserve(data.indices.size()*2);
+    // Mesh conversion runs on the render thread. Retain scratch capacity
+    // between chunk rebuilds instead of allocating two large vectors per mesh.
+    static std::vector<ChunkMeshVertex> tiled;
+    static std::vector<std::uint16_t> tiledIndices;
+    tiled.clear();
+    tiledIndices.clear();
+    const std::size_t vertexEstimate=std::min<std::size_t>(65532u,data.vertices.size()*2u);
+    if(tiled.capacity()<vertexEstimate) tiled.reserve(vertexEstimate);
+    const std::size_t indexEstimate=std::min<std::size_t>(98304u,data.indices.size()*2u);
+    if(tiledIndices.capacity()<indexEstimate) tiledIndices.reserve(indexEstimate);
     const auto mix=[](float a,float b,float t) { return a+(b-a)*t; };
     const auto interpolate=[&](const ChunkMeshVertex& a,const ChunkMeshVertex& b,
                                float t) {
