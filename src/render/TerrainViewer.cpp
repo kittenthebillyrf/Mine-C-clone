@@ -194,6 +194,19 @@ Model make_block_model(mc::world::BlockId id,Texture2D texture) {
 }
 void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     const auto index=static_cast<unsigned int>(id);
+    if(id==mc::world::BlockId::Torch) {
+        // Compact upright torch: dark wooden shaft, warm collar, animated-looking flame.
+        const Vector3 base={center.x,center.y-BLOCK*0.34f,center.z};
+        const Vector3 tip={center.x,center.y+BLOCK*0.12f,center.z};
+        DrawCylinderEx(base,tip,0.075f,0.055f,6,Color{105,67,35,255});
+        const Vector3 flameBase={center.x,center.y+BLOCK*0.10f,center.z};
+        const Vector3 flameTip={center.x+0.025f,center.y+BLOCK*0.34f,center.z};
+        DrawCylinderEx(flameBase,flameTip,0.105f,0.015f,6,Color{255,151,35,255});
+        DrawSphere(Vector3{center.x,center.y+BLOCK*0.16f,center.z},0.075f,Color{255,220,105,245});
+        // Soft local glow cue; actual world-light propagation is a later lighting stage.
+        DrawSphere(Vector3{center.x,center.y+BLOCK*0.12f,center.z},0.22f,Color{255,170,55,28});
+        return;
+    }
     if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
         DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
     }
