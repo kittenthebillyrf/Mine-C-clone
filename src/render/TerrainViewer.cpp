@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 #if defined(__SWITCH__)
+#include <switch.h>
 #include <sys/stat.h>
 #endif
 
@@ -782,12 +783,21 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 #endif
     { std::ifstream saveFile(MCC_WORLD_SAVE_PATH,std::ios::binary); if(saveFile) world.load(saveFile); }
 
+#if defined(__SWITCH__)
+    // A lighter internal framebuffer gives the Switch GPU more headroom.
+    InitWindow(960,540,"Mine C++ Clone");
+#else
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
-    SetTargetFPS(120);
+#endif
+    SetTargetFPS(60);
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
     std::vector<RuntimeChunkMesh> runtimeChunkMeshes;
     runtimeChunkMeshes.reserve(96);
+#if defined(__SWITCH__)
+    // NROs do not expose romfs paths until the filesystem is mounted.
+    romfsInit();
+#endif
     Image blockAtlas=LoadImage(MCC_BLOCK_ATLAS_PATH);
 #if !defined(__SWITCH__)
     if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_atlas_1_12.png");
@@ -823,7 +833,28 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(int i=0;i<HOTBAR_SIZE;++i) inventory[i]={startingItems[i],32};
     // Restore the complete local player session when a matching custom save
     // exists. Missing/invalid metadata leaves a fresh spawn and starter bar.
-    load_player_state(px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
+    const bool playerLoaded=load_player_state(px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
+    // New games (and old saves that resume underwater) choose the nearest dry,
+    // walkable surface instead of placing the player on the ocean floor.
+    if(!playerLoaded || in_water(world,px,py,pz)) {
+        double bestDistance=std::numeric_limits<double>::max();
+        bool foundDrySpawn=false;
+        const double center=(double(size)-1.0)*0.5;
+        for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
+            const int top=surface_y(world,x,z);
+            if(top<63 || top+1>=Chunk::Height) continue;
+            const BlockId floor=world.get_block(x,top-1,z);
+            if(floor==BlockId::Air || floor==BlockId::Water || floor==BlockId::Lava) continue;
+            if(world.get_block(x,top,z)!=BlockId::Air || world.get_block(x,top+1,z)!=BlockId::Air) continue;
+            const double dx=double(x)-center,dz=double(z)-center;
+            const double distance=dx*dx+dz*dz;
+            if(distance<bestDistance) {
+                bestDistance=distance; px=double(x)+0.5; pz=double(z)+0.5;
+                py=double(top); foundDrySpawn=true;
+            }
+        }
+        if(foundDrySpawn) motionX=motionY=motionZ=0.0;
+    }
     // Never resume inside terrain, even if a save was made just before a
     // falling block landed or the world was edited around the player.
     if(!collision_boxes(world,player_box(px,py,pz)).empty()) {
@@ -966,7 +997,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 // Leave the loop through the common cleanup path below.
             }
         }
-        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)))) {
+        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) {
             inventoryOpen=!inventoryOpen; creativeOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
@@ -1006,7 +1037,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB)));
         if(crouching) { moveStrafe*=0.3f; moveForward*=0.3f; }
         const bool jumping=captured && (IsKeyDown(KEY_SPACE) ||
-            (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)));
+            (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)));
         if(!paused && !inventoryOpen && !creativeOpen && captured) physicsAccumulator+=dt;
         else { physicsAccumulator=0.0f; previousForward=false; }
         while(physicsAccumulator>=PLAYER_TICK) {
@@ -1101,9 +1132,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BeginDrawing();
         ClearBackground(Color{135,190,235,255});
         BeginMode3D(camera);
-        const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
-        const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
-        const int minY=std::max(0,int(py)-18),maxY=std::min(Chunk::Height-1,int(py)+22);
+        const int minX=std::max(0,int(px)-8),maxX=std::min(size,int(px)+9);
+        const int minZ=std::max(0,int(pz)-8),maxZ=std::min(size,int(pz)+9);
+        const int minY=std::max(0,int(py)-10),maxY=std::min(Chunk::Height-1,int(py)+14);
         if(blockTexture.id!=0) {
             const int firstChunkX=minX/Chunk::Width,lastChunkX=maxX/Chunk::Width;
             const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=maxZ/Chunk::Depth;
@@ -1261,6 +1292,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
     }
     if(blockTexture.id!=0) UnloadTexture(blockTexture);
+#if defined(__SWITCH__)
+    romfsExit();
+#endif
     EnableCursor();
     CloseWindow();
     return 0;
