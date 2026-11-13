@@ -39,7 +39,18 @@ bool run_world_self_test() {
     if(restored.chunk_count()!=2 ||
        restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
        restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
-    return mc::world::block_info(mc::world::BlockId::Stone).solid;
+    if(!mc::world::block_info(mc::world::BlockId::Stone).solid) return false;
+
+    const mc::world::generation::ChunkGenerator generator(1122);
+    const auto column=generator.sample(0,0);
+    if(column.height<5||column.height>205) return false;
+    if(generator.sample(0,0).height!=column.height) return false;
+    mc::world::World generated;
+    generator.generate_chunk(generated,0,0);
+    if(generated.get_block(0,0,0)!=mc::world::BlockId::Bedrock) return false;
+    const auto surface=generated.get_block(0,column.height-1,0);
+    if(surface!=mc::world::BlockId::Grass&&surface!=mc::world::BlockId::Sand) return false;
+    return true;
 }
 }
 int main(int argc,char** argv) {
