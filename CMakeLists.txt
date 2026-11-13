@@ -25,6 +25,7 @@ add_executable(MineCppClone
   src/world/Chunk.cpp
   src/world/World.cpp
   src/world/WorldGen112.cpp
+  src/physics/PlayerPhysics.cpp
   src/render/ChunkMesh.cpp
   src/render/TerrainViewer.cpp
 )
