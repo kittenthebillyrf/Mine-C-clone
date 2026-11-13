@@ -1017,8 +1017,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool requestQuit=false;
     float menuYaw=0.0f;
     while(!WindowShouldClose()) {
+        bool switchMenuUp=false,switchMenuDown=false,switchMenuLeft=false,switchMenuRight=false;
+        bool switchMenuConfirm=false,switchMenuBack=false;
 #if defined(__SWITCH__)
         padUpdate(&switchPad);
+        const u64 switchKeysDown=padGetButtonsDown(&switchPad);
+        switchMenuUp=(switchKeysDown&HidNpadButton_Up)!=0;
+        switchMenuDown=(switchKeysDown&HidNpadButton_Down)!=0;
+        switchMenuLeft=(switchKeysDown&HidNpadButton_Left)!=0;
+        switchMenuRight=(switchKeysDown&HidNpadButton_Right)!=0;
+        switchMenuConfirm=(switchKeysDown&HidNpadButton_A)!=0;
+        switchMenuBack=(switchKeysDown&HidNpadButton_B)!=0;
 #endif
         const float dt=std::min(GetFrameTime(),0.10f);
         if(inMenu) {
@@ -1057,13 +1066,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int count=(optionsOpen||multiplayerOpen)?1:4;
             const bool menuPad=IsGamepadAvailable(0);
             if(menuPad) {
-                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)) menuSelection=(menuSelection+count-1)%count;
-                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)) menuSelection=(menuSelection+1)%count;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)||switchMenuUp) menuSelection=(menuSelection+count-1)%count;
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)||switchMenuDown) menuSelection=(menuSelection+1)%count;
             }
-            if(IsKeyPressed(KEY_UP)) menuSelection=(menuSelection+count-1)%count;
-            if(IsKeyPressed(KEY_DOWN)) menuSelection=(menuSelection+1)%count;
-            const bool menuConfirm=IsKeyPressed(KEY_ENTER)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
-            const bool menuBack=IsKeyPressed(KEY_ESCAPE)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+            if(IsKeyPressed(KEY_UP)||switchMenuUp) menuSelection=(menuSelection+count-1)%count;
+            if(IsKeyPressed(KEY_DOWN)||switchMenuDown) menuSelection=(menuSelection+1)%count;
+            const bool menuConfirm=IsKeyPressed(KEY_ENTER)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN))||switchMenuConfirm;
+            const bool menuBack=IsKeyPressed(KEY_ESCAPE)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))||switchMenuBack;
             const Vector2 mouse=GetMousePosition();
             for(int i=0;i<count;++i) {
                 const int y=by+i*(bh+gap);
@@ -1092,10 +1101,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawText("Online and LAN multiplayer are not implemented yet",GetScreenWidth()/2-205,by+bh+22,17,RAYWHITE);
                 DrawText("This screen will be connected when networking is added",GetScreenWidth()/2-225,by+bh+50,15,RAYWHITE);
             } else if(optionsOpen) {
-                const bool up=IsKeyPressed(KEY_UP)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP));
-                const bool down=IsKeyPressed(KEY_DOWN)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN));
-                const bool left=IsKeyPressed(KEY_LEFT)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT));
-                const bool right=IsKeyPressed(KEY_RIGHT)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT));
+                const bool up=IsKeyPressed(KEY_UP)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))||switchMenuUp;
+                const bool down=IsKeyPressed(KEY_DOWN)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))||switchMenuDown;
+                const bool left=IsKeyPressed(KEY_LEFT)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))||switchMenuLeft;
+                const bool right=IsKeyPressed(KEY_RIGHT)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))||switchMenuRight;
                 if(up) settingsSelection=(settingsSelection+4)%5;
                 if(down) settingsSelection=(settingsSelection+1)%5;
                 if(left||right) {
@@ -1119,7 +1128,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const bool gamepad=IsGamepadAvailable(0);
         bool switchZLPressed=false,switchZRPressed=false;
 #if defined(__SWITCH__)
-        const u64 switchKeysDown=padGetButtonsDown(&switchPad);
         switchZLPressed=(switchKeysDown&HidNpadButton_ZL)!=0;
         switchZRPressed=(switchKeysDown&HidNpadButton_ZR)!=0;
 #endif
@@ -1181,12 +1189,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(paused) {
             constexpr int PAUSE_ACTIONS=4;
-            if(!pauseSettings && (IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))))
+            if(!pauseSettings && (IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))||switchMenuUp))
                 pauseSelection=(pauseSelection+PAUSE_ACTIONS-1)%PAUSE_ACTIONS;
-            if(!pauseSettings && (IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))))
+            if(!pauseSettings && (IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))||switchMenuDown))
                 pauseSelection=(pauseSelection+1)%PAUSE_ACTIONS;
-            const bool confirm=!pauseSettings && (IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)));
-            if(!pauseSettings && gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
+            const bool confirm=!pauseSettings && (IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN))||switchMenuConfirm);
+            if(!pauseSettings && ((gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))||switchMenuBack)) {
                 paused=false; captured=true; pauseSelection=0; DisableCursor();
             }
             const Vector2 pauseMouse=GetMousePosition();
@@ -1559,10 +1567,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                      menuY+4*(menuH+menuGap)+40,14,LIGHTGRAY);
             if(pauseSettings) {
                 DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.82f));
-                const bool up=IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP));
-                const bool down=IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN));
-                const bool left=IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT));
-                const bool right=IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT));
+                const bool up=IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))||switchMenuUp;
+                const bool down=IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))||switchMenuDown;
+                const bool left=IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))||switchMenuLeft;
+                const bool right=IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))||switchMenuRight;
                 if(up) settingsSelection=(settingsSelection+4)%5;
                 if(down) settingsSelection=(settingsSelection+1)%5;
                 if(left||right) {
@@ -1574,7 +1582,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 draw_settings_panel(uiFont,settingsSelection,languageIndex,renderDistanceChunks,
                                     chunkBuildsPerFrame,fieldOfView,mouseSensitivity,
                                     GetScreenHeight()/2-165,languageCode);
-                if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)))
+                if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))||switchMenuBack)
                     pauseSettings=false;
             }
         }
