@@ -335,6 +335,48 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
             }
     }
 
+    // Deterministic biome vegetation pass. Trees are kept inside their
+    // owning chunk so chunk generation order cannot leave half-built canopies.
+    JavaRandom tree_random(static_cast<std::int64_t>(chunk_seed ^ std::uint64_t(seed_) ^ 0x7AEE112ULL));
+    const BiomeTerrain112 vegetation_biome=biome_at(ox+8,oz+8);
+    int tree_attempts=0;
+    switch(vegetation_biome.id) {
+        case BiomeId112::Forest: tree_attempts=7; break;
+        case BiomeId112::Taiga: tree_attempts=5; break;
+        case BiomeId112::Plains: tree_attempts=1; break;
+        default: break;
+    }
+    for(int attempt=0;attempt<tree_attempts;++attempt) {
+        const int tx=tree_random.next_int(12)+2,tz=tree_random.next_int(12)+2;
+        int ground=-1;
+        for(int y=254;y>sea-4;--y) {
+            const BlockId id=world.get_block(ox+tx,y,oz+tz);
+            if(id==BlockId::Grass||id==BlockId::Dirt) { ground=y; break; }
+            if(id!=BlockId::Air&&id!=BlockId::Snow) break;
+        }
+        if(ground<sea-1) continue;
+        const bool spruce=vegetation_biome.id==BiomeId112::Taiga;
+        const int trunkHeight=(spruce?5:4)+tree_random.next_int(3);
+        const BlockId log=spruce?BlockId::SpruceLog:BlockId::OakLog;
+        const BlockId leaves=spruce?BlockId::SpruceLeaves:BlockId::OakLeaves;
+        bool clear=true;
+        for(int y=1;y<=trunkHeight+2;++y)
+            if(world.get_block(ox+tx,ground+y,oz+tz)!=BlockId::Air) { clear=false; break; }
+        if(!clear) continue;
+        for(int y=1;y<=trunkHeight;++y) world.set_block(ox+tx,ground+y,oz+tz,log);
+        for(int layer=trunkHeight-2;layer<=trunkHeight+1;++layer) {
+            const int radius=layer==trunkHeight+1?1:2;
+            for(int dx=-radius;dx<=radius;++dx) for(int dz=-radius;dz<=radius;++dz) {
+                if(std::abs(dx)==radius&&std::abs(dz)==radius&&tree_random.next_int(3)==0) continue;
+                const int lx=tx+dx,lz=tz+dz;
+                if(lx<0||lx>=16||lz<0||lz>=16) continue;
+                const int wy=ground+layer;
+                if(world.get_block(ox+lx,wy,oz+lz)==BlockId::Air)
+                    world.set_block(ox+lx,wy,oz+lz,leaves);
+            }
+        }
+    }
+
     // Small deterministic village hut markers in suitable plains/desert chunks.
     // Full multi-piece village roads/structures remain a separate structure stage.
     const BiomeTerrain112 center_biome=biome_at(ox+8,oz+8);
