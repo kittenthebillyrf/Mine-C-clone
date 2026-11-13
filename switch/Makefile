@@ -29,7 +29,7 @@ LIBDIRS := $(PORTLIBS) $(LIBNX)
 
 APP_TITLE := Mine C++ Clone
 APP_AUTHOR := Mine C++ Clone
-APP_VERSION := 0.1.0
+APP_VERSION := 0.5.0
 NO_ICON := 1
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
@@ -50,8 +50,14 @@ export LIBPATHS := -L$(RAYLIB_NX)/src -L$(RAYLIB_NX)/src/switch-nx $(foreach dir
 export LD := $(CXX)
 export APP_TITLE APP_AUTHOR APP_VERSION
 export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
-.PHONY: all clean
-all: $(BUILD)
+.PHONY: all clean prepare-romfs
+all: prepare-romfs $(BUILD)
+prepare-romfs:
+	@mkdir -p $(ROMFS)/assets
+	@test -s ../assets/blocks_atlas_1_12.png
+	@test -s ../assets/block_texture_map.json
+	@cp -f ../assets/blocks_atlas_1_12.png $(ROMFS)/assets/
+	@cp -f ../assets/block_texture_map.json $(ROMFS)/assets/
 $(BUILD):
 	@mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
