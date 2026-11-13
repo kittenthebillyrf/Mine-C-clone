@@ -1685,7 +1685,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     adjust_settings(settingsSelection,right?1:-1,languageIndex,renderDistanceChunks,
                                     chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps);
                     languageCode=std::string(mc::i18n::languages()[std::size_t(languageIndex)].code);
-                    save_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
+                    save_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps);
+                    apply_fps_limit(fpsLimit);
                 }
                 draw_settings_panel(uiFont,settingsSelection,languageIndex,renderDistanceChunks,
                                     chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps,
