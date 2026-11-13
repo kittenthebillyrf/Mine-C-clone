@@ -3,6 +3,7 @@
 #include "raymath.h"
 #include "../world/World.hpp"
 #include "../world/WorldGen112.hpp"
+#include "../physics/PlayerPhysics.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -479,120 +480,8 @@ bool offset_position_is_liquid(const mc::world::World& world,double x,double y,d
 bool move_player_entity(const mc::world::World& world,double& px,double& py,double& pz,
                         double& dx,double& dy,double& dz,bool sneaking,bool wasOnGround,
                         bool& collidedHorizontally,bool& collidedVertically,bool& onGround) {
-    PlayerAabb box=player_box(px,py,pz);
-    // If a falling block or world edit closes into the player's current space,
-    // recover vertically to the nearest free position before applying movement.
-    if(!collision_boxes(world,box).empty()) {
-        bool recovered=false;
-        for(double lift=0.05;lift<=2.0001;lift+=0.05) {
-            const PlayerAabb candidate=box.offset(0.0,lift,0.0);
-            if(collision_boxes(world,candidate).empty()) {
-                box=candidate;
-                py+=lift;
-                recovered=true;
-                break;
-            }
-        }
-        if(!recovered) {
-            dx=dy=dz=0.0;
-            collidedHorizontally=true;
-            collidedVertically=true;
-            onGround=false;
-            return false;
-        }
-    }
-    if(sneaking && wasOnGround) {
-        while(dx!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,0.0)).empty()) {
-            if(dx>-0.05 && dx<0.05) dx=0.0;
-            else if(dx>0.0) dx-=0.05;
-            else dx+=0.05;
-        }
-        while(dz!=0.0 && collision_boxes(world,box.offset(0.0,-PLAYER_STEP_HEIGHT,dz)).empty()) {
-            if(dz>-0.05 && dz<0.05) dz=0.0;
-            else if(dz>0.0) dz-=0.05;
-            else dz+=0.05;
-        }
-        while(dx!=0.0 && dz!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,dz)).empty()) {
-            if(dx>-0.05 && dx<0.05) dx=0.0;
-            else if(dx>0.0) dx-=0.05;
-            else dx+=0.05;
-            if(dz>-0.05 && dz<0.05) dz=0.0;
-            else if(dz>0.0) dz-=0.05;
-            else dz+=0.05;
-        }
-    }
-    const double originalY=dy;
-    const double originalStepX=dx,originalStepZ=dz;
-    const auto obstacles=collision_boxes(world,box.expand(dx,dy,dz));
-    const PlayerAabb originalBox=box;
-    for(const auto& obstacle:obstacles) dy=clip_y(obstacle,box,dy);
-    box=box.offset(0.0,dy,0.0);
-    for(const auto& obstacle:obstacles) dx=clip_x(obstacle,box,dx);
-    box=box.offset(dx,0.0,0.0);
-    for(const auto& obstacle:obstacles) dz=clip_z(obstacle,box,dz);
-    box=box.offset(0.0,0.0,dz);
-    const bool canStep=wasOnGround || (originalY!=dy && originalY<0.0);
-    if(PLAYER_STEP_HEIGHT>0.0 && canStep && (originalStepX!=dx || originalStepZ!=dz)) {
-        const double normalX=dx,normalY=dy,normalZ=dz;
-        const PlayerAabb normalBox=box;
-        auto stepObstacles=collision_boxes(world,originalBox.expand(originalStepX,PLAYER_STEP_HEIGHT,originalStepZ));
-        PlayerAabb candidateA=originalBox;
-        const PlayerAabb candidateAForY=candidateA.expand(originalStepX,0.0,originalStepZ);
-        double upA=PLAYER_STEP_HEIGHT;
-        for(const auto& obstacle:stepObstacles) upA=clip_y(obstacle,candidateAForY,upA);
-        candidateA=candidateA.offset(0.0,upA,0.0);
-        double moveAX=originalStepX;
-        for(const auto& obstacle:stepObstacles) moveAX=clip_x(obstacle,candidateA,moveAX);
-        candidateA=candidateA.offset(moveAX,0.0,0.0);
-        double moveAZ=originalStepZ;
-        for(const auto& obstacle:stepObstacles) moveAZ=clip_z(obstacle,candidateA,moveAZ);
-        candidateA=candidateA.offset(0.0,0.0,moveAZ);
-
-        PlayerAabb candidateB=originalBox;
-        double upB=PLAYER_STEP_HEIGHT;
-        for(const auto& obstacle:stepObstacles) upB=clip_y(obstacle,candidateB,upB);
-        candidateB=candidateB.offset(0.0,upB,0.0);
-        double moveBX=originalStepX;
-        for(const auto& obstacle:stepObstacles) moveBX=clip_x(obstacle,candidateB,moveBX);
-        candidateB=candidateB.offset(moveBX,0.0,0.0);
-        double moveBZ=originalStepZ;
-        for(const auto& obstacle:stepObstacles) moveBZ=clip_z(obstacle,candidateB,moveBZ);
-        candidateB=candidateB.offset(0.0,0.0,moveBZ);
-
-        const double distA=moveAX*moveAX+moveAZ*moveAZ;
-        const double distB=moveBX*moveBX+moveBZ*moveBZ;
-        if(distA>distB) {
-            dx=moveAX; dz=moveAZ; dy=-upA; box=candidateA;
-        } else {
-            dx=moveBX; dz=moveBZ; dy=-upB; box=candidateB;
-        }
-        for(const auto& obstacle:stepObstacles) dy=clip_y(obstacle,box,dy);
-        box=box.offset(0.0,dy,0.0);
-        if(normalX*normalX+normalZ*normalZ>=dx*dx+dz*dz) {
-            dx=normalX; dy=normalY; dz=normalZ; box=normalBox;
-        }
-    }
-    collidedHorizontally=(originalStepX!=dx || originalStepZ!=dz);
-    collidedVertically=(originalY!=dy);
-    onGround=collidedVertically && originalY<0.0;
-    if(collidedHorizontally) { /* motion is zeroed by caller */ }
-    // Final invariant: never commit a position whose player AABB intersects
-    // a solid collision shape. This also protects against future shape/step
-    // solver regressions; the previous non-penetrating position is retained.
-    if(!collision_boxes(world,box).empty()) {
-        px=(originalBox.minX+originalBox.maxX)*0.5;
-        py=originalBox.minY;
-        pz=(originalBox.minZ+originalBox.maxZ)*0.5;
-        dx=dy=dz=0.0;
-        collidedHorizontally=true;
-        collidedVertically=true;
-        onGround=true;
-        return false;
-    }
-    px=(box.minX+box.maxX)*0.5;
-    py=box.minY;
-    pz=(box.minZ+box.maxZ)*0.5;
-    return true;
+    return mc::physics::move_player(world,px,py,pz,dx,dy,dz,sneaking,wasOnGround,
+                                    collidedHorizontally,collidedVertically,onGround);
 }
 void move_relative(double& motionX,double& motionY,double& motionZ,
                    float strafe,float up,float forward,float friction,float yaw) {
