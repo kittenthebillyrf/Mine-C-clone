@@ -113,19 +113,26 @@ CraftResult match_recipe(const ItemStack* grid) {
     return {};
 }
 bool add_stack(ItemStack* inventory,mc::world::BlockId id,int count) {
-    for(int i=0;i<INVENTORY_SIZE&&count>0;++i) {
+    int capacity=0;
+    for(int i=0;i<INVENTORY_SIZE;++i) {
+        if(inventory[i].count==0) capacity+=64;
+        else if(inventory[i].id==id) capacity+=64-inventory[i].count;
+    }
+    if(capacity<count) return false;
+    int remaining=count;
+    for(int i=0;i<INVENTORY_SIZE&&remaining>0;++i) {
         if(inventory[i].id==id&&inventory[i].count>0&&inventory[i].count<64) {
-            const int moved=std::min(count,64-inventory[i].count);
-            inventory[i].count+=moved; count-=moved;
+            const int moved=std::min(remaining,64-inventory[i].count);
+            inventory[i].count+=moved; remaining-=moved;
         }
     }
-    for(int i=0;i<INVENTORY_SIZE&&count>0;++i) {
+    for(int i=0;i<INVENTORY_SIZE&&remaining>0;++i) {
         if(inventory[i].count==0) {
-            const int moved=std::min(count,64);
-            inventory[i]={id,moved}; count-=moved;
+            const int moved=std::min(remaining,64);
+            inventory[i]={id,moved}; remaining-=moved;
         }
     }
-    return count==0;
+    return remaining==0;
 }
 
 bool add_item(ItemStack* inventory, mc::world::BlockId id) {
