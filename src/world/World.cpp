@@ -103,7 +103,7 @@ bool World::load_chunk_file(int chunk_x,int chunk_z,const std::string& directory
         if(lo==std::char_traits<char>::eof()||hi==std::char_traits<char>::eof()) return false;
         const std::uint16_t id=static_cast<std::uint16_t>(static_cast<unsigned char>(lo))|
                                static_cast<std::uint16_t>(static_cast<unsigned char>(hi)<<8);
-        if(id>static_cast<std::uint16_t>(BlockId::IronOre)) return false;
+        if(id>static_cast<std::uint16_t>(BlockId::CraftingTable)) return false;
         if(!loaded.set(x,y,z,static_cast<BlockId>(id))) return false;
     }
     if(in.peek()!=std::char_traits<char>::eof()) return false;
