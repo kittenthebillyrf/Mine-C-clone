@@ -148,36 +148,31 @@ Color color_for(mc::world::BlockId id) {
         default:return BLANK;
     }
 }
-Color texture_base(mc::world::BlockId id) {
+int texture_slot(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch(id) {
-        case BlockId::Grass:return Color{92,165,65,255};
-        case BlockId::Dirt:return Color{132,91,57,255};
-        case BlockId::Stone:return Color{128,130,136,255};
-        case BlockId::Sand:return Color{218,202,148,255};
-        case BlockId::Bedrock:return Color{58,58,62,255};
-        default:return WHITE;
+        case BlockId::Stone:return 0; case BlockId::Dirt:return 1;
+        case BlockId::Grass:return 2; case BlockId::Sand:return 3;
+        case BlockId::Bedrock:return 4; case BlockId::Cobblestone:return 5;
+        case BlockId::OakPlanks:return 6; case BlockId::OakLog:return 7;
+        case BlockId::OakLeaves:return 8; case BlockId::Gravel:return 9;
+        case BlockId::Sandstone:return 10; case BlockId::CoalOre:return 11;
+        case BlockId::IronOre:return 12; case BlockId::GoldOre:return 13;
+        case BlockId::DiamondOre:return 14; case BlockId::RedstoneOre:return 15;
+        default:return -1;
     }
 }
-Model make_block_model(mc::world::BlockId id) {
-    const Color base=texture_base(id);
-    Image image=GenImageColor(16,16,base);
-    const std::uint32_t seed=static_cast<std::uint32_t>(id)*0x9e3779b9u+0x12345u;
-    for(int y=0;y<16;++y) for(int x=0;x<16;++x) {
-        const std::uint32_t h=hash2(x,y,seed);
-        const int delta=int(h%31u)-15;
-        Color pixel{static_cast<unsigned char>(std::clamp(int(base.r)+delta,0,255)),
-                    static_cast<unsigned char>(std::clamp(int(base.g)+delta,0,255)),
-                    static_cast<unsigned char>(std::clamp(int(base.b)+delta,0,255)),255};
-        if(id==mc::world::BlockId::Grass && y>11) pixel=Color{104,75,48,255};
-        if(id==mc::world::BlockId::Bedrock && (h%7u)==0u) pixel=Color{30,30,34,255};
-        ImageDrawPixel(&image,x,y,pixel);
-    }
+Model make_block_model(mc::world::BlockId id,const Image& atlas) {
+    const int slot=texture_slot(id);
+    if(slot<0 || !ImageIsValid(atlas)) return Model{};
+    const Rectangle crop{float((slot%4)*16),float((slot/4)*16),16.0f,16.0f};
+    Image image=ImageFromImage(atlas,crop);
     Texture2D texture=LoadTextureFromImage(image);
     UnloadImage(image);
     if(texture.id!=0) SetTextureFilter(texture,TEXTURE_FILTER_POINT);
     Model model=LoadModelFromMesh(GenMeshCube(BLOCK,BLOCK,BLOCK));
-    if(model.materialCount>0 && texture.id!=0) model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
+    if(model.materialCount>0 && texture.id!=0)
+        model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
     return model;
 }
 void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
@@ -185,7 +180,7 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
         DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
     }
-    if(index<7 && models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
+    if(index<mc::world::BLOCK_ID_COUNT && models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
     else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
@@ -276,9 +271,18 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(120);
     DisableCursor();
-    Model blockModels[7]{};
-    const BlockId texturedBlocks[5]={BlockId::Stone,BlockId::Dirt,BlockId::Grass,BlockId::Sand,BlockId::Bedrock};
-    for(const BlockId id:texturedBlocks) blockModels[static_cast<unsigned int>(id)]=make_block_model(id);
+    Model blockModels[BLOCK_ID_COUNT]{};
+    Image blockAtlas=LoadImage("assets/blocks_core_1_12.png");
+    if(!ImageIsValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_core_1_12.png");
+    const BlockId texturedBlocks[16]={
+        BlockId::Stone,BlockId::Dirt,BlockId::Grass,BlockId::Sand,
+        BlockId::Bedrock,BlockId::Cobblestone,BlockId::OakPlanks,BlockId::OakLog,
+        BlockId::OakLeaves,BlockId::Gravel,BlockId::Sandstone,BlockId::CoalOre,
+        BlockId::IronOre,BlockId::GoldOre,BlockId::DiamondOre,BlockId::RedstoneOre
+    };
+    for(const BlockId id:texturedBlocks)
+        blockModels[static_cast<unsigned int>(id)]=make_block_model(id,blockAtlas);
+    if(ImageIsValid(blockAtlas)) UnloadImage(blockAtlas);
     float px=float(size)*0.5f,pz=float(size)*0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
     float vx=0.0f,vz=0.0f,vy=0.0f,yaw=0.0f,pitch=-0.18f;
@@ -622,7 +626,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndDrawing();
     }
     { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
-    for(unsigned int i=1;i<7;++i) if(blockModels[i].meshCount>0) UnloadModel(blockModels[i]);
+    for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) if(blockModels[i].meshCount>0) UnloadModel(blockModels[i]);
     EnableCursor();
     CloseWindow();
     return 0;
