@@ -198,6 +198,19 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
         DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
     }
     if(index<mc::world::BLOCK_ID_COUNT && models[index].meshCount>0) {
+        if(id==mc::world::BlockId::OakFence) {
+            // Vanilla 1.12 fence silhouette: narrow central post plus two rails
+            // on each horizontal axis. All pieces reuse the atlas-backed plank model.
+            const Model& fence=models[index];
+            DrawModelEx(fence,center,Vector3{0,1,0},0.0f,Vector3{0.25f,1.0f,0.25f},WHITE);
+            for(float y : {-0.35f,0.35f}) {
+                DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
+                            Vector3{1.0f,0.1875f,0.1875f},WHITE);
+                DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
+                            Vector3{0.1875f,0.1875f,1.0f},WHITE);
+            }
+            return;
+        }
         Vector3 modelCenter=center;
         if(id==mc::world::BlockId::OakSlab) modelCenter.y-=BLOCK*0.25f;
         DrawModel(models[index],modelCenter,1.0f,WHITE);
