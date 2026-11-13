@@ -736,25 +736,27 @@ bool replace_saved_file(const std::string& temporary,const std::string& destinat
 }
 
 void save_options_file(int languageIndex,int renderDistanceChunks,int chunkBuildsPerFrame,
-                       float fieldOfView,float mouseSensitivity) {
+                       float fieldOfView,float mouseSensitivity,int fpsLimit,bool showFps) {
     const auto& available=mc::i18n::languages();
     if(languageIndex<0 || languageIndex>=int(available.size())) languageIndex=0;
     std::ofstream output(MCC_OPTIONS_SAVE_PATH,std::ios::trunc);
     if(!output) return;
-    output << "MCCOPTIONS 1\n" << available[std::size_t(languageIndex)].code << '\n'
+    output << "MCCOPTIONS 2\n" << available[std::size_t(languageIndex)].code << '\n'
            << renderDistanceChunks << ' ' << chunkBuildsPerFrame << ' '
-           << fieldOfView << ' ' << mouseSensitivity << '\n';
+           << fieldOfView << ' ' << mouseSensitivity << ' '
+           << fpsLimit << ' ' << int(showFps) << '\n';
 }
 void load_options_file(int& languageIndex,int& renderDistanceChunks,int& chunkBuildsPerFrame,
-                       float& fieldOfView,float& mouseSensitivity) {
+                       float& fieldOfView,float& mouseSensitivity,int& fpsLimit,bool& showFps) {
     std::ifstream input(MCC_OPTIONS_SAVE_PATH);
     if(!input) return;
     std::string magic,code;
     int version=0;
-    if(!(input>>magic>>version>>code) || magic!="MCCOPTIONS" || version!=1) return;
-    int distance=renderDistanceChunks,builds=chunkBuildsPerFrame;
+    if(!(input>>magic>>version>>code) || magic!="MCCOPTIONS" || (version!=1&&version!=2)) return;
+    int distance=renderDistanceChunks,builds=chunkBuildsPerFrame,loadedFps=fpsLimit,loadedShow=showFps?1:0;
     float fov=fieldOfView,sensitivity=mouseSensitivity;
     if(!(input>>distance>>builds>>fov>>sensitivity)) return;
+    if(version>=2 && !(input>>loadedFps>>loadedShow)) return;
     const auto& available=mc::i18n::languages();
     const auto found=std::find_if(available.begin(),available.end(),
         [&](const mc::i18n::Language& item){return item.code==code;});
@@ -763,9 +765,19 @@ void load_options_file(int& languageIndex,int& renderDistanceChunks,int& chunkBu
     chunkBuildsPerFrame=std::clamp(builds,1,8);
     fieldOfView=std::clamp(fov,50.0f,110.0f);
     mouseSensitivity=std::clamp(sensitivity,0.0008f,0.0060f);
+    fpsLimit=(loadedFps<=30?30:(loadedFps<=60?60:120));
+    showFps=loadedShow!=0;
+}
+void apply_fps_limit(int fpsLimit) {
+#if defined(__SWITCH__)
+    SetTargetFPS(std::min(fpsLimit,60));
+#else
+    SetTargetFPS(fpsLimit);
+#endif
 }
 void adjust_settings(int selection,int direction,int& languageIndex,int& renderDistanceChunks,
-                     int& chunkBuildsPerFrame,float& fieldOfView,float& mouseSensitivity) {
+                     int& chunkBuildsPerFrame,float& fieldOfView,float& mouseSensitivity,
+                     int& fpsLimit,bool& showFps) {
     const int step=direction<0?-1:1;
     switch(selection) {
         case 0: {
@@ -777,6 +789,14 @@ void adjust_settings(int selection,int direction,int& languageIndex,int& renderD
         case 2: chunkBuildsPerFrame=std::clamp(chunkBuildsPerFrame+step,1,8); break;
         case 3: fieldOfView=std::clamp(fieldOfView+float(step)*5.0f,50.0f,110.0f); break;
         case 4: mouseSensitivity=std::clamp(mouseSensitivity+float(step)*0.0002f,0.0008f,0.0060f); break;
+        case 5: {
+            const int levels[3]={30,60,120};
+            int current=0;
+            while(current<2&&levels[current]!=fpsLimit)++current;
+            fpsLimit=levels[std::clamp(current+step,0,2)];
+            break;
+        }
+        case 6: showFps=!showFps; break;
         default: break;
     }
 }
@@ -786,8 +806,8 @@ void draw_ui_text(Font font,const std::string& value,Vector2 position,float font
 }
 void draw_settings_panel(Font font,int selected,int languageIndex,int renderDistanceChunks,
                          int chunkBuildsPerFrame,float fieldOfView,float mouseSensitivity,
-                         int panelY,const std::string& languageCode) {
-    const int panelW=720,panelH=306,panelX=GetScreenWidth()/2-panelW/2;
+                         int fpsLimit,bool showFps,int panelY,const std::string& languageCode) {
+    const int panelW=720,panelH=390,panelX=GetScreenWidth()/2-panelW/2;
     DrawRectangle(panelX,panelY,panelW,panelH,Fade(Color{25,27,32,255},0.98f));
     DrawRectangleLinesEx(Rectangle{float(panelX),float(panelY),float(panelW),float(panelH)},2,Color{180,180,190,255});
     draw_ui_text(font,mc::i18n::text("settings.title",languageCode),
@@ -797,21 +817,25 @@ void draw_settings_panel(Font font,int selected,int languageIndex,int renderDist
         ?std::string(languages[std::size_t(languageIndex)].native_name):"English";
     const std::string chunkUnit=mc::i18n::text("settings.chunks",languageCode);
     const std::string buildUnit=mc::i18n::text("settings.per_frame",languageCode);
-    const std::string names[5]={
+    const std::string names[7]={
         mc::i18n::text("settings.language",languageCode),
         mc::i18n::text("settings.render_distance",languageCode),
         mc::i18n::text("settings.chunk_updates",languageCode),
         mc::i18n::text("settings.fov",languageCode),
-        mc::i18n::text("settings.sensitivity",languageCode)
+        mc::i18n::text("settings.sensitivity",languageCode),
+        mc::i18n::text("settings.fps_limit",languageCode),
+        mc::i18n::text("settings.show_fps",languageCode)
     };
-    const std::string values[5]={
+    const std::string values[7]={
         languageName,
         TextFormat("%i %s",renderDistanceChunks,chunkUnit.c_str()),
         TextFormat("%i %s",chunkBuildsPerFrame,buildUnit.c_str()),
         TextFormat("%.0f",fieldOfView),
-        TextFormat("%.1f",mouseSensitivity*1000.0f)
+        TextFormat("%.1f",mouseSensitivity*1000.0f),
+        TextFormat("%i FPS",fpsLimit),
+        showFps?mc::i18n::text("settings.on",languageCode):mc::i18n::text("settings.off",languageCode)
     };
-    for(int i=0;i<5;++i) {
+    for(int i=0;i<7;++i) {
         const int y=panelY+54+i*42;
         const Rectangle row{float(panelX+14),float(y),float(panelW-28),38.0f};
         if(i==selected) DrawRectangleRec(row,Color{66,78,96,255});
@@ -822,7 +846,7 @@ void draw_settings_panel(Font font,int selected,int languageIndex,int renderDist
         draw_ui_text(font,values[i],Vector2{float(panelX+panelW-30)-valueSize.x,float(y+8)},19,YELLOW);
     }
     draw_ui_text(font,mc::i18n::text("settings.instructions",languageCode),
-                 Vector2{float(panelX+24),float(panelY+274)},15,LIGHTGRAY);
+                 Vector2{float(panelX+24),float(panelY+354)},15,LIGHTGRAY);
 }
 
 bool save_world_file(mc::world::World& world,
@@ -939,7 +963,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     int chunkBuildsPerFrame=4;
     float mouseSensitivity=0.0025f;
     float fieldOfView=70.0f;
-    load_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
+    int fpsLimit=60;
+    bool showFps=true;
+    load_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps);
     std::string languageCode(mc::i18n::languages()[std::size_t(languageIndex)].code);
     { std::ifstream saveFile(MCC_WORLD_SAVE_PATH,std::ios::binary); if(saveFile) world.load(saveFile); }
     for(const auto& pos:world.chunk_positions()) load_chunk_sidecar(world,pos.x,pos.z);
@@ -949,7 +975,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         generate_or_load_chunk(world,overworld,centerChunkX+dx,centerChunkZ+dz,chunksWide);
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
-    SetTargetFPS(60);
+    apply_fps_limit(fpsLimit);
 #if defined(__SWITCH__)
     padConfigureInput(1,HidNpadStyleSet_NpadFullCtrl);
     PadState switchPad{};
@@ -1093,9 +1119,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int playerChunkZ=std::clamp(int(std::floor(pz))/Chunk::Depth,0,chunksWide-1);
         const int activeChunkRadius=std::clamp(renderDistanceChunks+1,3,17);
         int generatedChunksThisFrame=0;
-        for(int ring=0;ring<=activeChunkRadius && generatedChunksThisFrame<2;++ring) {
-            for(int dz=-ring;dz<=ring && generatedChunksThisFrame<2;++dz)
-                for(int dx=-ring;dx<=ring && generatedChunksThisFrame<2;++dx) {
+        for(int ring=0;ring<=activeChunkRadius && generatedChunksThisFrame<chunkBuildsPerFrame;++ring) {
+            for(int dz=-ring;dz<=ring && generatedChunksThisFrame<chunkBuildsPerFrame;++dz)
+                for(int dx=-ring;dx<=ring && generatedChunksThisFrame<chunkBuildsPerFrame;++dx) {
                     if(std::max(std::abs(dx),std::abs(dz))!=ring) continue;
                     const int cx=playerChunkX+dx,cz=playerChunkZ+dz;
                     if(cx<0||cz<0||cx>=chunksWide||cz>=chunksWide||world.find_chunk(cx,cz)) continue;
@@ -1181,16 +1207,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const bool down=IsKeyPressed(KEY_DOWN)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))||switchMenuDown;
                 const bool left=IsKeyPressed(KEY_LEFT)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))||switchMenuLeft;
                 const bool right=IsKeyPressed(KEY_RIGHT)||(menuPad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))||switchMenuRight;
-                if(up) settingsSelection=(settingsSelection+4)%5;
-                if(down) settingsSelection=(settingsSelection+1)%5;
+                if(up) settingsSelection=(settingsSelection+6)%7;
+                if(down) settingsSelection=(settingsSelection+1)%7;
                 if(left||right) {
                     adjust_settings(settingsSelection,right?1:-1,languageIndex,renderDistanceChunks,
-                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
+                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps);
                     languageCode=std::string(mc::i18n::languages()[std::size_t(languageIndex)].code);
-                    save_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
+                    save_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps);
+                    apply_fps_limit(fpsLimit);
                 }
                 draw_settings_panel(uiFont,settingsSelection,languageIndex,renderDistanceChunks,
-                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity,
+                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps,
                                     by+bh+12,languageCode);
             } else {
                 DrawText("Online and LAN multiplayer are not implemented yet",GetScreenWidth()/2-205,by+bh+22,17,RAYWHITE);
@@ -1652,17 +1679,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const bool down=IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))||switchMenuDown;
                 const bool left=IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))||switchMenuLeft;
                 const bool right=IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))||switchMenuRight;
-                if(up) settingsSelection=(settingsSelection+4)%5;
-                if(down) settingsSelection=(settingsSelection+1)%5;
+                if(up) settingsSelection=(settingsSelection+6)%7;
+                if(down) settingsSelection=(settingsSelection+1)%7;
                 if(left||right) {
                     adjust_settings(settingsSelection,right?1:-1,languageIndex,renderDistanceChunks,
-                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
+                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps);
                     languageCode=std::string(mc::i18n::languages()[std::size_t(languageIndex)].code);
                     save_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
                 }
                 draw_settings_panel(uiFont,settingsSelection,languageIndex,renderDistanceChunks,
-                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity,
-                                    GetScreenHeight()/2-165,languageCode);
+                                    chunkBuildsPerFrame,fieldOfView,mouseSensitivity,fpsLimit,showFps,
+                                    GetScreenHeight()/2-205,languageCode);
                 if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))||switchMenuBack)
                     pauseSettings=false;
             }
@@ -1693,7 +1720,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
-        DrawFPS(GetScreenWidth()-90,12);
+        if(showFps) DrawFPS(GetScreenWidth()-90,12);
         EndDrawing();
         if(requestQuit) break;
     }
