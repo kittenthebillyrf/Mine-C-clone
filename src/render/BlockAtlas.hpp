@@ -34,24 +34,24 @@ inline std::vector<unsigned char> decode_block_atlas_base64() {
 inline int block_atlas_tile(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch (id) {
-        case BlockId::Stone: return 0;
+        case BlockId::Stone: return 5;
         case BlockId::Grass: return 1;
-        case BlockId::Dirt: return 2;
-        case BlockId::Sand: return 3;
-        case BlockId::Water: return 4;
-        case BlockId::Bedrock: return 5;
-        case BlockId::Wood: return 6;
-        case BlockId::Leaves: return 7;
-        case BlockId::Gravel: return 8;
-        case BlockId::CoalOre: return 9;
-        case BlockId::IronOre: return 10;
+        case BlockId::Dirt: return 0;
+        case BlockId::Sand: return 6;
+        case BlockId::Water: return 7;
+        case BlockId::Bedrock: return 8;
+        case BlockId::Wood: return 3;
+        case BlockId::Leaves: return 2;
+        case BlockId::Gravel: return 9;
+        case BlockId::CoalOre: return 10;
+        case BlockId::IronOre: return 11;
         default: return 0;
     }
 }
 struct BlockAtlasAssets {
     Texture2D texture{};
     Material material{};
-    Mesh meshes[11]{};
+    Mesh meshes[12]{};
 };
 
 // Build a cube with independent UVs for every face. The previous implementation
@@ -131,9 +131,9 @@ inline BlockAtlasAssets& load_block_atlas() {
                 SetTextureFilter(assets.texture, TEXTURE_FILTER_POINT);
                 assets.material = LoadMaterialDefault();
                 SetMaterialTexture(&assets.material, MATERIAL_MAP_DIFFUSE, assets.texture);
-                for (int tile = 0; tile < 11; ++tile) {
+                for (int tile = 0; tile < 12; ++tile) {
                     const int topTile = tile;
-                    const int bottomTile = (tile == 1) ? 2 : tile; // Grass block bottom = dirt.
+                    const int bottomTile = (tile == 1) ? 0 : tile; // Grass bottom = dirt.
                     assets.meshes[tile] = make_block_mesh(tile, topTile, bottomTile);
                 }
             } else if (assets.texture.id != 0) {
@@ -148,7 +148,7 @@ inline bool draw_textured_block(BlockAtlasAssets& assets, mc::world::BlockId id,
     const int tile = block_atlas_tile(id);
     if (assets.texture.id == 0 || assets.meshes[tile].vertexCount == 0) return false;
     assets.material.maps[MATERIAL_MAP_DIFFUSE].color =
-        id == mc::world::BlockId::Water ? Fade(WHITE, 0.68f) : WHITE;
+        WHITE;
     DrawMesh(assets.meshes[tile], assets.material, MatrixTranslate(center.x, center.y, center.z));
     return true;
 }
