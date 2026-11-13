@@ -208,85 +208,148 @@ int OverworldGenerator112::terrain_height(int x,int z) const {
 }
 void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
     constexpr int sea=63;
-    // Until the biome provider lands, use the exact vanilla Plains terrain
-    // parameters for all 10x10 generation samples.
-    std::array<BiomeTerrain112,100> biomes{};
-    const DensityMap112 density=generate_density_map(cx,cz,biomes);
     const int ox=cx*16,oz=cz*16;
 
-    // Java 1.12.2 expands each 5x33x5 density lattice cell into
-    // 4x8x4 blocks using trilinear interpolation.
-    for(int cell_x=0;cell_x<4;++cell_x) {
-        for(int cell_z=0;cell_z<4;++cell_z) {
-            for(int node_y=0;node_y<32;++node_y) {
-                for(int sub_y=0;sub_y<8;++sub_y) {
-                    const double fy=double(sub_y)/8.0;
-                    for(int sub_x=0;sub_x<4;++sub_x) {
-                        const double fx=double(sub_x)/4.0;
-                        for(int sub_z=0;sub_z<4;++sub_z) {
-                            const double fz=double(sub_z)/4.0;
-                            const double a=lerp(lerp(density.at(cell_x,cell_z,node_y),
-                                density.at(cell_x+1,cell_z,node_y),fx),
-                                lerp(density.at(cell_x,cell_z+1,node_y),
-                                density.at(cell_x+1,cell_z+1,node_y),fx),fz);
-                            const double b=lerp(lerp(density.at(cell_x,cell_z,node_y+1),
-                                density.at(cell_x+1,cell_z,node_y+1),fx),
-                                lerp(density.at(cell_x,cell_z+1,node_y+1),
-                                density.at(cell_x+1,cell_z+1,node_y+1),fx),fz);
-                            const double value=lerp(a,b,fy);
-                            const int x=cell_x*4+sub_x;
-                            const int z=cell_z*4+sub_z;
-                            const int y=node_y*8+sub_y;
-                            const int world_x=ox+x,world_z=oz+z;
-                            if(value>0.0) {
-                                world.set_block(world_x,y,world_z,y==0?BlockId::Bedrock:BlockId::Stone);
-                            } else if(y<=sea) {
-                                world.set_block(world_x,y,world_z,BlockId::Water);
-                            }
-                        }
-                    }
+    // Climate selection follows the 1.12 warm/medium/cold biome families.
+    // Terrain parameters are the registered biome base-height/variation values.
+    auto biome_at=[&](int wx,int wz) {
+        const double temperature=forest_->sample(wx/420.0,0.0,wz/420.0);
+        const double rainfall=scale_->sample(wx/360.0,0.0,wz/360.0);
+        BiomeTerrain112 b{};
+        if(temperature>0.42) {
+            b.id=BiomeId112::Desert; b.base_height=0.125f; b.height_variation=0.05f;
+        } else if(temperature < -0.48) {
+            b.id=BiomeId112::Snowy; b.base_height=0.125f; b.height_variation=0.05f;
+        } else if(temperature < -0.12) {
+            b.id=BiomeId112::Taiga; b.base_height=0.2f; b.height_variation=0.2f;
+        } else if(rainfall>0.38) {
+            b.id=BiomeId112::Forest; b.base_height=0.1f; b.height_variation=0.3f;
+        } else if(rainfall < -0.45) {
+            b.id=BiomeId112::Mountains; b.base_height=1.0f; b.height_variation=0.5f;
+        } else if(rainfall < -0.15) {
+            b.id=BiomeId112::Swamp; b.base_height=-0.2f; b.height_variation=0.1f;
+        } else {
+            b.id=BiomeId112::Plains; b.base_height=0.125f; b.height_variation=0.05f;
+        }
+        return b;
+    };
+    std::array<BiomeTerrain112,100> biome_grid{};
+    for(int z=0;z<10;++z) for(int x=0;x<10;++x)
+        biome_grid[x+z*10]=biome_at((cx*4+x-2)*4,(cz*4+z-2)*4);
+    const DensityMap112 density=generate_density_map(cx,cz,biome_grid);
+
+    // Expand the density lattice to 16x256x16 with the vanilla 4x8x4 subdivision.
+    for(int cell_x=0;cell_x<4;++cell_x) for(int cell_z=0;cell_z<4;++cell_z)
+        for(int node_y=0;node_y<32;++node_y) for(int sub_y=0;sub_y<8;++sub_y)
+            for(int sub_x=0;sub_x<4;++sub_x) for(int sub_z=0;sub_z<4;++sub_z) {
+                const double fy=double(sub_y)/8.0,fx=double(sub_x)/4.0,fz=double(sub_z)/4.0;
+                const double a=lerp(lerp(density.at(cell_x,cell_z,node_y),density.at(cell_x+1,cell_z,node_y),fx),
+                    lerp(density.at(cell_x,cell_z+1,node_y),density.at(cell_x+1,cell_z+1,node_y),fx),fz);
+                const double b=lerp(lerp(density.at(cell_x,cell_z,node_y+1),density.at(cell_x+1,cell_z,node_y+1),fx),
+                    lerp(density.at(cell_x,cell_z+1,node_y+1),density.at(cell_x+1,cell_z+1,node_y+1),fx),fz);
+                const double value=lerp(a,b,fy);
+                const int x=cell_x*4+sub_x,z=cell_z*4+sub_z,y=node_y*8+sub_y;
+                if(value>0.0) world.set_block(ox+x,y,oz+z,y==0?BlockId::Bedrock:BlockId::Stone);
+                else if(y<=sea) world.set_block(ox+x,y,oz+z,BlockId::Water);
+            }
+
+    // Surface layers: desert sand, snowy snow, and grass/dirt elsewhere.
+    const auto surface_noise=surface_->generate_region(ox,0,oz,16,1,16,0.0625,1.0,0.0625);
+    const std::uint64_t chunk_seed=std::uint64_t(cx)*341873128712ULL+std::uint64_t(cz)*132897987541ULL;
+    JavaRandom surface_random(static_cast<std::int64_t>(chunk_seed));
+    for(int x=0;x<16;++x) for(int z=0;z<16;++z) {
+        const int wx=ox+x,wz=oz+z;
+        const BiomeTerrain112 biome=biome_at(wx*4,wz*4);
+        const int depth=int(surface_noise[std::size_t(x)*16+z]/3.0+3.0+surface_random.next_double()*0.25);
+        int remaining=-1;
+        for(int y=255;y>=0;--y) {
+            if(y<=surface_random.next_int(5)) { world.set_block(wx,y,wz,BlockId::Bedrock); continue; }
+            const BlockId current=world.get_block(wx,y,wz);
+            if(current==BlockId::Air) remaining=-1;
+            else if(current==BlockId::Stone) {
+                if(remaining==-1) {
+                    const bool desert=biome.id==BiomeId112::Desert;
+                    const bool snowy=biome.id==BiomeId112::Snowy;
+                    remaining=depth;
+                    const BlockId top=desert?BlockId::Sand:(snowy?BlockId::Snow:BlockId::Grass);
+                    const BlockId filler=desert?BlockId::Sand:(snowy?BlockId::Dirt:BlockId::Dirt);
+                    if(depth<=0) world.set_block(wx,y,wz,y<sea?BlockId::Water:BlockId::Stone);
+                    else if(y>=sea-1) world.set_block(wx,y,wz,top);
+                    else if(y<sea-7-depth) world.set_block(wx,y,wz,BlockId::Gravel);
+                    else world.set_block(wx,y,wz,filler);
+                } else if(remaining>0) {
+                    --remaining;
+                    world.set_block(wx,y,wz,biome.id==BiomeId112::Desert?BlockId::Sand:BlockId::Dirt);
                 }
             }
         }
     }
 
-    // Plains surface replacement based on the 1.12.2 biome terrain pass.
-    // Surface noise and per-chunk Random state are separate from terrain noise.
-    const auto surface_noise=surface_->generate_region(ox,0,oz,16,1,16,
-        0.0625,1.0,0.0625);
-    const std::uint64_t chunk_seed=std::uint64_t(cx)*341873128712ULL
-        +std::uint64_t(cz)*132897987541ULL;
-    JavaRandom chunk_random(static_cast<std::int64_t>(chunk_seed));
-    for(int x=0;x<16;++x) for(int z=0;z<16;++z) {
-        const int wx=ox+x,wz=oz+z;
-        const double noise_value=surface_noise[std::size_t(x)*16+z];
-        const int surface_depth=static_cast<int>(noise_value/3.0+3.0
-            +chunk_random.next_double()*0.25);
-        int remaining=-1;
-        for(int y=255;y>=0;--y) {
-            if(y<=chunk_random.next_int(5)) {
-                world.set_block(wx,y,wz,BlockId::Bedrock);
-                continue;
-            }
-            const BlockId current=world.get_block(wx,y,wz);
-            if(current==BlockId::Air) {
-                remaining=-1;
-            } else if(current==BlockId::Stone) {
-                if(remaining==-1) {
-                    BlockId top=BlockId::Grass;
-                    BlockId filler=BlockId::Dirt;
-                    if(surface_depth<=0) { top=BlockId::Air; filler=BlockId::Stone; }
-                    if(y<sea && top==BlockId::Air) top=BlockId::Water;
-                    remaining=surface_depth;
-                    if(y>=sea-1) world.set_block(wx,y,wz,top);
-                    else if(y<sea-7-surface_depth) world.set_block(wx,y,wz,BlockId::Gravel);
-                    else world.set_block(wx,y,wz,filler);
-                } else if(remaining>0) {
-                    --remaining;
-                    world.set_block(wx,y,wz,BlockId::Dirt);
-                }
-            }
+    // Deterministic cave worms. Each chunk owns its random stream so generation
+    // order does not change the result; water pockets are left untouched.
+    JavaRandom cave_random(static_cast<std::int64_t>(chunk_seed ^ std::uint64_t(seed_) ^ 0xCA7E112ULL));
+    const int cave_count=cave_random.next_int(4);
+    for(int cave=0;cave<cave_count;++cave) {
+        double x=double(ox+cave_random.next_int(16)),y=double(12+cave_random.next_int(48));
+        double z=double(oz+cave_random.next_int(16));
+        double angle=cave_random.next_double()*6.28318530718;
+        double pitch=(cave_random.next_double()-0.5)*0.25;
+        const int length=24+cave_random.next_int(40);
+        for(int step=0;step<length;++step) {
+            const double radius=1.2+std::sin(double(step)/length*3.14159265359)*2.0;
+            x+=std::cos(angle); z+=std::sin(angle); y+=pitch;
+            angle+=(cave_random.next_double()-0.5)*0.22;
+            pitch=(pitch+(cave_random.next_double()-0.5)*0.08)*0.8;
+            for(int bx=int(x-radius);bx<=int(x+radius);++bx)
+                for(int bz=int(z-radius);bz<=int(z+radius);++bz)
+                    for(int by=std::max(5,int(y-radius));by<=std::min(120,int(y+radius));++by) {
+                        const double dx=(bx+0.5-x)/radius,dz=(bz+0.5-z)/radius,dy=(by+0.5-y)/radius;
+                        if(dx*dx+dy*dy+dz*dz<1.0) {
+                            const BlockId old=world.get_block(bx,by,bz);
+                            if(old==BlockId::Stone||old==BlockId::Dirt||old==BlockId::Grass)
+                                world.set_block(bx,by,bz,by<10?BlockId::Lava:BlockId::Air);
+                        }
+                    }
         }
+    }
+
+    // Ore veins: compact ellipsoidal clusters at depth bands inspired by
+    // vanilla 1.12 distribution; independent chunk seed for reproducibility.
+    JavaRandom ore_random(static_cast<std::int64_t>(chunk_seed ^ std::uint64_t(seed_) ^ 0x0AE112ULL));
+    struct OreRule { BlockId id; int veins; int size; int min_y; int max_y; };
+    constexpr OreRule ores[]={{BlockId::CoalOre,20,9,8,128},{BlockId::IronOre,20,8,8,64},
+        {BlockId::GoldOre,2,8,4,32},{BlockId::RedstoneOre,8,7,4,16},
+        {BlockId::LapisOre,1,7,4,32},{BlockId::DiamondOre,1,7,4,16},
+        {BlockId::EmeraldOre,1,3,4,32}};
+    for(const auto& ore:ores) for(int vein=0;vein<ore.veins;++vein) {
+        const int cx0=ox+ore_random.next_int(16),cz0=oz+ore_random.next_int(16);
+        const int cy=ore.min_y+ore_random.next_int(ore.max_y-ore.min_y+1);
+        const int radius=std::max(1,ore.size/2);
+        for(int dx=-radius;dx<=radius;++dx) for(int dy=-radius;dy<=radius;++dy)
+            for(int dz=-radius;dz<=radius;++dz) {
+                if(dx*dx+dy*dy+dz*dz>radius*radius) continue;
+                const int wx=cx0+dx,wy=cy+dy,wz=cz0+dz;
+                if(world.get_block(wx,wy,wz)==BlockId::Stone)
+                    world.set_block(wx,wy,wz,ore.id);
+            }
+    }
+
+    // Small deterministic village hut markers in suitable plains/desert chunks.
+    // Full multi-piece village roads/structures remain a separate structure stage.
+    const BiomeTerrain112 center_biome=biome_at(ox+8,oz+8);
+    if((center_biome.id==BiomeId112::Plains||center_biome.id==BiomeId112::Desert)
+        && ((std::uint64_t(cx)*31u+std::uint64_t(cz)*17u+std::uint64_t(seed_))%23u)==0u) {
+        const int hx=ox+5,hz=oz+5;
+        int hy=sea+1;
+        for(int y=255;y>=1;--y) if(world.get_block(hx,y,hz)!=BlockId::Air&&world.get_block(hx,y,hz)!=BlockId::Water) { hy=y+1; break; }
+        for(int x=0;x<5;++x) for(int z=0;z<5;++z) world.set_block(hx+x,hy-1,hz+z,BlockId::OakPlanks);
+        for(int x=0;x<5;++x) for(int z=0;z<5;++z) for(int y=0;y<4;++y) {
+            const bool wall=x==0||x==4||z==0||z==4;
+            if(wall&&y<3) world.set_block(hx+x,hy+y,hz+z,BlockId::OakLog);
+            else if(y==3) world.set_block(hx+x,hy+y,hz+z,BlockId::OakPlanks);
+        }
+        world.set_block(hx+2,hy,hz,BlockId::Air);
+        world.set_block(hx+2,hy+1,hz,BlockId::Air);
     }
 }
 }
