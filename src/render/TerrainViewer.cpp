@@ -100,8 +100,18 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     };
     ensure_chunks(size/2,size/2);
 
-    InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
+    InitWindow(1280,720,"Mine C++ Clone");
+#ifdef __SWITCH__
+    SetTargetFPS(60);
+    constexpr int renderRadius=7;
+    constexpr int verticalRadius=12;
+    constexpr int menuRadius=12;
+#else
     SetTargetFPS(120);
+    constexpr int renderRadius=14;
+    constexpr int verticalRadius=20;
+    constexpr int menuRadius=17;
+#endif
     DisableCursor();
     float px=float(size)*0.5f,pz=float(size)*0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
@@ -121,8 +131,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool multiplayerOpen=false;
     bool requestQuit=false;
     float menuYaw=0.0f;
+    int menuSelection=0;
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
+        const bool gamepad=IsGamepadAvailable(0);
         ensure_chunks(int(px),int(pz));
         if(!pendingChunks.empty()) {
             const ChunkPos next=pendingChunks.front();
@@ -132,6 +144,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(inMenu) {
             menuYaw+=dt*0.055f;
+            if(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)))
+                menuSelection=(menuSelection+3)%4;
+            if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)))
+                menuSelection=(menuSelection+1)%4;
+            const bool menuActivate=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
             Camera3D menuCamera{};
             const float cx=float(size)*BLOCK*0.5f, cz=float(size)*BLOCK*0.5f;
             menuCamera.position=Vector3{cx+std::sin(menuYaw)*48.0f,34.0f,cz+std::cos(menuYaw)*48.0f};
@@ -141,8 +158,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             ClearBackground(Color{110,160,205,255});
             BeginMode3D(menuCamera);
             const int center=int(size/2);
-            for(int z=std::max(0,center-17);z<std::min(size,center+18);++z) {
-                for(int x=std::max(0,center-17);x<std::min(size,center+18);++x) {
+            for(int z=std::max(0,center-menuRadius);z<std::min(size,center+menuRadius+1);++z) {
+                for(int x=std::max(0,center-menuRadius);x<std::min(size,center+menuRadius+1);++x) {
                     const int top=surface_y(world,x,z);
                     for(int y=std::max(0,top-5);y<top;++y) {
                         const BlockId id=world.get_block(x,y,z);
@@ -164,15 +181,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const int y=by+i*(bh+gap);
                 const Rectangle rect{float(bx),float(y),float(bw),float(bh)};
                 const bool hover=CheckCollisionPointRec(mouse,rect);
-                DrawRectangleRec(rect,hover?Color{25,25,25,245}:Color{75,75,75,225});
-                DrawRectangleLinesEx(rect,2,hover?RAYWHITE:Color{25,25,25,255});
+                if(hover) menuSelection=i;
+                const bool active=(optionsOpen||multiplayerOpen)||menuSelection==i;
+                DrawRectangleRec(rect,active?Color{25,25,25,245}:Color{75,75,75,225});
+                DrawRectangleLinesEx(rect,2,active?RAYWHITE:Color{25,25,25,255});
                 const char* label=(optionsOpen||multiplayerOpen)?"Back":labels[i];
                 DrawText(label,bx+(bw-MeasureText(label,22))/2,y+10,22,RAYWHITE);
-                if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    if(optionsOpen||multiplayerOpen) { optionsOpen=false; multiplayerOpen=false; }
+                if((hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))||(menuActivate&&active)) {
+                    if(optionsOpen||multiplayerOpen) { optionsOpen=false; multiplayerOpen=false; menuSelection=0; }
                     else if(i==0) { inMenu=false; captured=true; DisableCursor(); }
-                    else if(i==1) multiplayerOpen=true;
-                    else if(i==2) optionsOpen=true;
+                    else if(i==1) { multiplayerOpen=true; menuSelection=0; }
+                    else if(i==2) { optionsOpen=true; menuSelection=0; }
                     else if(i==3) requestQuit=true;
                 }
             }
@@ -189,7 +208,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(requestQuit) break;
             continue;
         }
-        const bool gamepad=IsGamepadAvailable(0);
         if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
             paused=!paused;
             inventoryOpen=false; creativeOpen=false;
@@ -308,10 +326,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BeginDrawing();
         ClearBackground(Color{135,190,235,255});
         BeginMode3D(camera);
-        const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
-        const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
+        const int minX=std::max(0,int(px)-renderRadius),maxX=std::min(size,int(px)+renderRadius+1);
+        const int minZ=std::max(0,int(pz)-renderRadius),maxZ=std::min(size,int(pz)+renderRadius+1);
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
-            const int minY=std::max(0,int(py/BLOCK)-18),maxY=std::min(Chunk::Height,int(py/BLOCK)+22);
+            const int minY=std::max(0,int(py/BLOCK)-verticalRadius),maxY=std::min(Chunk::Height,int(py/BLOCK)+verticalRadius+2);
             for(int y=minY;y<maxY;++y) {
                 const BlockId id=world.get_block(x,y,z);
                 if(id==BlockId::Air) continue;
