@@ -146,6 +146,15 @@ bool run_world_self_test() {
        restored.get_block(4,12,4)!=mc::world::BlockId::DarkOakStairs) return false;
     const auto* restoredStair=restored.get_block_state(4,12,4);
     if(!restoredStair || restoredStair->facing!=1 || restoredStair->shape!=1) return false;
+    std::stringstream chunkSave(std::ios::in|std::ios::out|std::ios::binary);
+    if(!world.save_chunk(chunkSave,0,0)) return false;
+    mc::world::World pagedWorld;
+    chunkSave.seekg(0);
+    if(!pagedWorld.load_chunk(chunkSave,0,0) ||
+       pagedWorld.get_block(0,10,0)!=mc::world::BlockId::Stone ||
+       !pagedWorld.get_block_state(4,12,4) ||
+       pagedWorld.get_block_state(4,12,4)->shape!=1) return false;
+    if(!pagedWorld.erase_chunk(0,0)||pagedWorld.chunk_count()!=0) return false;
     for(std::uint8_t facing=0;facing<4;++facing) {
         const auto* state=restored.get_block_state(5+int(facing),12,4);
         if(!state || state->facing!=facing || state->shape!=(facing&1u)) return false;

@@ -56,7 +56,7 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
             {"settings.chunks", "чанков"},
             {"settings.per_frame", "за кадр"},
             {"help.usage", "Параметры: --size N --seed N --output ФАЙЛ --lang КОД --help"},
-            {"help.languages", "Языки: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français), zh_CN (简体中文)"},
+            {"help.languages", "Языки: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français)"},
             {"error.output", "Ошибка: не удалось записать файл: "},
             {"terrain.generated", "Создан ландшафт {size}x{size}, seed {seed} -> {output}"},
             {"language.unknown", "Неизвестный язык '{code}', используется английский."}
@@ -82,7 +82,7 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
             {"settings.chunks", "chunks"},
             {"settings.per_frame", "por fotograma"},
             {"help.usage", "Opciones: --size N --seed N --output ARCHIVO --lang CODIGO --help"},
-            {"help.languages", "Idiomas: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français), zh_CN (简体中文)"},
+            {"help.languages", "Idiomas: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français)"},
             {"error.output", "Error: no se puede escribir el archivo: "},
             {"terrain.generated", "Terreno {size}x{size} generado, semilla {seed} -> {output}"},
             {"language.unknown", "Idioma desconocido '{code}', se usará inglés."}
@@ -108,7 +108,7 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
             {"settings.chunks", "Chunks"},
             {"settings.per_frame", "pro Bild"},
             {"help.usage", "Optionen: --size N --seed N --output DATEI --lang CODE --help"},
-            {"help.languages", "Sprachen: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français), zh_CN (简体中文)"},
+            {"help.languages", "Sprachen: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français)"},
             {"error.output", "Fehler: Ausgabedatei kann nicht geschrieben werden: "},
             {"terrain.generated", "Terrain {size}x{size} erstellt, Seed {seed} -> {output}"},
             {"language.unknown", "Unbekannte Sprache '{code}', Englisch wird verwendet."}
@@ -134,7 +134,7 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
             {"settings.chunks", "chunks"},
             {"settings.per_frame", "par image"},
             {"help.usage", "Options : --size N --seed N --output FICHIER --lang CODE --help"},
-            {"help.languages", "Langues : en (English), ru (Русский), es (Español), de (Deutsch), fr (Français), zh_CN (简体中文)"},
+            {"help.languages", "Langues : en (English), ru (Русский), es (Español), de (Deutsch), fr (Français)"},
             {"error.output", "Erreur : impossible d'écrire le fichier : "},
             {"terrain.generated", "Terrain {size}x{size} généré, graine {seed} -> {output}"},
             {"language.unknown", "Langue inconnue « {code} », anglais utilisé."}

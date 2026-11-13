@@ -4,6 +4,7 @@
 #include <istream>
 #include <ostream>
 #include <unordered_map>
+#include <utility>
 
 namespace mc::world {
 std::size_t ChunkPosHash::operator()(const ChunkPos& p) const noexcept {
@@ -133,7 +134,8 @@ std::size_t World::tick_falling_blocks() {
     // teleporting all the way down during one update.
     for(auto& entry:chunks_) {
         Chunk& chunk=entry.second;
-        const auto falling=chunk.falling_blocks();
+        auto falling=chunk.falling_blocks();
+        std::sort(falling.begin(),falling.end());
         for(const std::size_t index:falling) {
             const int x=int(index%Chunk::Width);
             const int z=int((index/Chunk::Width)%Chunk::Depth);

@@ -329,6 +329,7 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
             for(int dz=-radius;dz<=radius;++dz) {
                 if(dx*dx+dy*dy+dz*dz>radius*radius) continue;
                 const int wx=cx0+dx,wy=cy+dy,wz=cz0+dz;
+                if(wx<ox||wx>=ox+16||wz<oz||wz>=oz+16) continue;
                 if(world.get_block(wx,wy,wz)==BlockId::Stone)
                     world.set_block(wx,wy,wz,ore.id);
             }
