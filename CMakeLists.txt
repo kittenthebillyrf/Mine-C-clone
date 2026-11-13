@@ -25,6 +25,7 @@ add_executable(MineCppClone
   src/world/Block.cpp
   src/world/Chunk.cpp
   src/world/World.cpp
+  src/world/generation/ChunkGenerator.cpp
   src/render/TerrainViewer.cpp
 )
 target_include_directories(MineCppClone PRIVATE src)
