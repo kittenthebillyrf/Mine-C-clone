@@ -1,6 +1,8 @@
 #pragma once
 #include "Json.hpp"
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <map>
 #include <string>
 #include <vector>
