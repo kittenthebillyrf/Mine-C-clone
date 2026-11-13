@@ -805,6 +805,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(60);
+#if defined(__SWITCH__)
+    padConfigureInput(1,HidNpadStyleSet_NpadFullCtrl);
+    PadState switchPad{};
+    padInitializeDefault(&switchPad);
+#endif
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
     std::vector<RuntimeChunkMesh> runtimeChunkMeshes;
@@ -908,6 +913,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool requestQuit=false;
     float menuYaw=0.0f;
     while(!WindowShouldClose()) {
+#if defined(__SWITCH__)
+        padUpdate(&switchPad);
+#endif
         const float dt=std::min(GetFrameTime(),0.10f);
         if(inMenu) {
             menuYaw+=dt*0.055f;
@@ -982,9 +990,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const bool gamepad=IsGamepadAvailable(0);
         bool switchZLPressed=false,switchZRPressed=false;
 #if defined(__SWITCH__)
-        const u64 switchKeysDown=hidKeysDown();
-        switchZLPressed=(switchKeysDown&KEY_ZL)!=0;
-        switchZRPressed=(switchKeysDown&KEY_ZR)!=0;
+        const u64 switchKeysDown=padGetButtonsDown(&switchPad);
+        switchZLPressed=(switchKeysDown&HidNpadButton_ZL)!=0;
+        switchZRPressed=(switchKeysDown&HidNpadButton_ZR)!=0;
 #endif
         if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
             paused=!paused; pauseSettings=false;
@@ -1154,8 +1162,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(gamepad) {
                 // L/R cycle the hotbar. ZL/ZR are reserved for block placement/breaking.
 #if defined(__SWITCH__)
-                if(switchKeysDown&KEY_L) selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
-                if(switchKeysDown&KEY_R) selected=(selected+1)%HOTBAR_SIZE;
+                if(switchKeysDown&HidNpadButton_L) selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
+                if(switchKeysDown&HidNpadButton_R) selected=(selected+1)%HOTBAR_SIZE;
 #else
                 if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1))
                     selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
@@ -1202,7 +1210,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetScreenToWorldRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&switchZRPressed))) {
+        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||switchZRPressed)) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
@@ -1210,7 +1218,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(creativeMode || add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
-        if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&switchZLPressed))) {
+        if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||switchZLPressed)) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
