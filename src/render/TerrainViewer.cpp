@@ -407,8 +407,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawText("Online and LAN multiplayer are not implemented yet",GetScreenWidth()/2-205,by+bh+22,17,RAYWHITE);
                 DrawText("This screen will be connected when networking is added",GetScreenWidth()/2-225,by+bh+50,15,RAYWHITE);
             } else {
-                DrawText("Graphics: 3D voxel panorama",GetScreenWidth()/2-125,by+bh+18,17,RAYWHITE);
-                DrawText("World seed and display settings will be added here",GetScreenWidth()/2-215,by+bh+44,15,RAYWHITE);
+                DrawText(TextFormat("Device detected: %s",detectedDevice),GetScreenWidth()/2-140,by+bh+18,17,RAYWHITE);
+                DrawText(TextFormat("Recommended render distance: %i chunks",recommendedRenderDistance),GetScreenWidth()/2-190,by+bh+44,15,RAYWHITE);
+                DrawText("Apply the recommended profile in this menu",GetScreenWidth()/2-175,by+bh+68,15,LIGHTGRAY);
             }
             DrawText("Mine C++ Clone  |  Inspired by the Java 1.12 era",12,GetScreenHeight()-28,14,RAYWHITE);
             EndDrawing();
@@ -430,16 +431,30 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const int cx=GetScreenWidth()/2, cy=GetScreenHeight()/2;
                 const Rectangle minus{float(cx-150),float(cy-55),52,44};
                 const Rectangle plus{float(cx+98),float(cy-55),52,44};
+                const Rectangle renderMinus{float(cx-150),float(cy+5),52,44};
+                const Rectangle renderPlus{float(cx+98),float(cy+5),52,44};
+                const int maxRenderDistance=
+#ifdef __SWITCH__
+                    12;
+#else
+                    32;
+#endif
                 const Vector2 mouse=GetMousePosition();
                 if(back) { pauseOptionsOpen=false; pauseSelection=0; }
                 if(up) cameraFov=std::min(100.0f,cameraFov+2.0f);
                 if(down) cameraFov=std::max(50.0f,cameraFov-2.0f);
+                if(IsKeyPressed(KEY_RIGHT)) renderRadius=std::min(maxRenderDistance,renderRadius+1);
+                if(IsKeyPressed(KEY_LEFT)) renderRadius=std::max(2,renderRadius-1);
                 if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     if(CheckCollisionPointRec(mouse,minus)) cameraFov=std::max(50.0f,cameraFov-2.0f);
                     if(CheckCollisionPointRec(mouse,plus)) cameraFov=std::min(100.0f,cameraFov+2.0f);
-                    if(CheckCollisionPointRec(mouse,Rectangle{float(cx-150),float(cy+55),300,44})) { pauseOptionsOpen=false; pauseSelection=0; }
+                    if(CheckCollisionPointRec(mouse,renderMinus)) renderRadius=std::max(2,renderRadius-1);
+                    if(CheckCollisionPointRec(mouse,renderPlus)) renderRadius=std::min(maxRenderDistance,renderRadius+1);
+                    if(CheckCollisionPointRec(mouse,Rectangle{float(cx-150),float(cy+115),300,44})) { pauseOptionsOpen=false; pauseSelection=0; }
                 }
                 if(accept) { pauseOptionsOpen=false; pauseSelection=0; }
+                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)) renderRadius=std::max(2,renderRadius-1);
+                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) renderRadius=std::min(maxRenderDistance,renderRadius+1);
             } else {
                 if(up) pauseSelection=(pauseSelection+2)%3;
                 if(down) pauseSelection=(pauseSelection+1)%3;
@@ -471,8 +486,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(captured) DisableCursor(); else EnableCursor();
         }
         if(!paused && (IsKeyPressed(KEY_R)||(gamepad&&button_y()))) {
-            creativeOpen=!creativeOpen; inventoryOpen=false;
-            captured=!creativeOpen;
+            inventoryOpen=!inventoryOpen; creativeOpen=false;
+            captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
         if(!paused && (IsKeyPressed(KEY_F5)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_THUMB)))) {
@@ -764,14 +779,18 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("GAME MENU",GetScreenWidth()/2-105,GetScreenHeight()/2-190,34,RAYWHITE);
             if(pauseOptionsOpen) {
                 const int cx=GetScreenWidth()/2,cy=GetScreenHeight()/2;
-                DrawText("SETTINGS",cx-82,cy-135,28,YELLOW);
+                DrawText("SETTINGS",cx-82,cy-155,28,YELLOW);
                 DrawText(TextFormat("Field of view: %.0f",cameraFov),cx-95,cy-42,21,RAYWHITE);
                 DrawRectangle(cx-150,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy-55,52,44,RAYWHITE); DrawText("-",cx-132,cy-51,30,RAYWHITE);
                 DrawRectangle(cx+98,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy-55,52,44,RAYWHITE); DrawText("+",cx+113,cy-51,30,RAYWHITE);
-                DrawText("UP / DOWN or - / +: change FOV",cx-155,cy+12,17,LIGHTGRAY);
-                DrawRectangle(cx-150,cy+55,300,44,Color{45,45,45,255}); DrawRectangleLines(cx-150,cy+55,300,44,RAYWHITE);
-                DrawText("Back",cx-24,cy+67,18,RAYWHITE);
-                DrawText("B / BACKSPACE: return to game menu",cx-170,cy+112,15,LIGHTGRAY);
+                DrawText("FOV",cx-205,cy-42,18,LIGHTGRAY);
+                DrawText(TextFormat("Render distance: %i chunks",renderRadius),cx-145,cy+14,19,RAYWHITE);
+                DrawRectangle(cx-150,cy+5,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy+5,52,44,RAYWHITE); DrawText("-",cx-132,cy+9,30,RAYWHITE);
+                DrawRectangle(cx+98,cy+5,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy+5,52,44,RAYWHITE); DrawText("+",cx+113,cy+9,30,RAYWHITE);
+                DrawText("LEFT / RIGHT or L1 / R1: render distance",cx-200,cy+58,15,LIGHTGRAY);
+                DrawRectangle(cx-150,cy+115,300,42,Color{45,45,45,255}); DrawRectangleLines(cx-150,cy+115,300,42,RAYWHITE);
+                DrawText("Back",cx-24,cy+126,18,RAYWHITE);
+                DrawText("B / BACKSPACE: return",cx-110,cy+165,15,LIGHTGRAY);
             } else {
                 const char* pauseLabels[3]={"Back to Game","Settings","Save & Quit to Main Menu"};
                 const int bw=300,bh=48,gap=12,bx=GetScreenWidth()/2-bw/2,by=GetScreenHeight()/2-5;
