@@ -74,7 +74,7 @@ bool ray_block(Ray ray,mc::world::World& world,Vector3& hit,Vector3& previous) {
 }
 int run_terrain_viewer(int map_size,std::uint32_t seed) {
     using namespace mc::world;
-    const int size=std::clamp(map_size,32,96);
+    const int size=std::clamp(map_size,256,4096);
     World world;
     const ChunkGenerator generator(seed);
     const int chunkCount=(size+Chunk::Width-1)/Chunk::Width;
@@ -83,6 +83,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             generator.generate_chunk(world,cx,cz);
 
     { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
+    const auto ensure_chunks = [&](int world_x,int world_z) {
+        const int centerX=world_x/Chunk::Width, centerZ=world_z/Chunk::Depth;
+        for(int cz=std::max(0,centerZ-2);cz<=std::min((size-1)/Chunk::Depth,centerZ+2);++cz)
+            for(int cx=std::max(0,centerX-2);cx<=std::min((size-1)/Chunk::Width,centerX+2);++cx)
+                if(world.find_chunk(cx,cz)==nullptr) generator.generate_chunk(world,cx,cz);
+    };
+    ensure_chunks(size/2,size/2);
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(120);
@@ -107,6 +114,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     float menuYaw=0.0f;
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
+        ensure_chunks(int(px),int(pz));
         if(inMenu) {
             menuYaw+=dt*0.055f;
             Camera3D menuCamera{};
