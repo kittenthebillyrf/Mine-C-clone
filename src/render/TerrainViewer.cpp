@@ -318,6 +318,23 @@ std::vector<PlayerAabb> collision_boxes(const mc::world::World& world,const Play
             for(int x=minX;x<=maxX;++x) {
                 const auto id=world.get_block(x,y,z);
                 if(!is_solid(id)) continue;
+                if(is_wood_slab(id)) {
+                    const PlayerAabb slab{double(x),double(y),double(z),
+                                          double(x+1),double(y)+0.5,double(z+1)};
+                    if(intersects(slab,query)) boxes.push_back(slab);
+                    continue;
+                }
+                if(is_wood_stairs(id)) {
+                    // Match the default rendered stair: a lower half-block plus
+                    // an upper rear half. Block-state rotation is handled later.
+                    const PlayerAabb lower{double(x),double(y),double(z),
+                                           double(x+1),double(y)+0.5,double(z+1)};
+                    const PlayerAabb upper{double(x),double(y)+0.5,double(z)+0.5,
+                                           double(x+1),double(y)+1.0,double(z+1)};
+                    if(intersects(lower,query)) boxes.push_back(lower);
+                    if(intersects(upper,query)) boxes.push_back(upper);
+                    continue;
+                }
                 if(is_wood_fence(id)) {
                     const auto add=[&](PlayerAabb shape) {
                         if(intersects(shape,query)) boxes.push_back(shape);
