@@ -49,6 +49,12 @@ std::vector<Box> shapes(const world::World& w,const Box& q) {
         const auto id=w.get_block(x,y,z);
         if(id==world::BlockId::Air||!world::block_info(id).solid)continue;
         auto add=[&](Box b){if(intersects(b,q))out.push_back(b);};
+        // Bedrock always has a full, immovable collision cube. Keep this
+        // explicit so it cannot accidentally inherit a partial block shape.
+        if(id==world::BlockId::Bedrock) {
+            add({double(x),double(y),double(z),double(x+1),double(y+1),double(z+1)});
+            continue;
+        }
         if(slab(id)){add({double(x),double(y),double(z),double(x+1),double(y)+0.5,double(z+1)});continue;}
         if(stairs(id)) {
             const auto* s=w.get_block_state(x,y,z);const int face=s?int(s->facing&3u):2;
