@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sstream>
 #if defined(__SWITCH__)
 #include <switch.h>
 #include <sys/stat.h>
@@ -328,6 +329,24 @@ struct RuntimeChunkMesh {
     ChunkMeshData data;
     Model model{};
 };
+bool section_in_frustum(const Camera3D& camera,int cx,int cz,int section,int screenWidth,int screenHeight) {
+    const Vector3 forward=Vector3Normalize(Vector3Subtract(camera.target,camera.position));
+    const Vector3 right=Vector3Normalize(Vector3CrossProduct(forward,camera.up));
+    const Vector3 up=Vector3Normalize(Vector3CrossProduct(right,forward));
+    const Vector3 center{(float(cx*mc::world::Chunk::Width)+8.0f)*BLOCK,
+                         (float(section*ChunkMeshBuilder::SectionHeight)+8.0f)*BLOCK,
+                         (float(cz*mc::world::Chunk::Depth)+8.0f)*BLOCK};
+    const Vector3 delta=Vector3Subtract(center,camera.position);
+    constexpr float radius=27.72f; // Bounding sphere around a 16x16x16 section.
+    const float depth=Vector3DotProduct(delta,forward);
+    if(depth+radius<0.1f) return false;
+    const float safeDepth=std::max(0.1f,depth);
+    const float halfHeight=std::tan(camera.fovy*DEG2RAD*0.5f)*safeDepth;
+    const float halfWidth=halfHeight*(float(screenWidth)/float(std::max(1,screenHeight)));
+    if(std::abs(Vector3DotProduct(delta,right))>halfWidth+radius) return false;
+    if(std::abs(Vector3DotProduct(delta,up))>halfHeight+radius) return false;
+    return true;
+}
 bool fence_connects_to(mc::world::BlockId id) {
     using mc::world::BlockId;
     if(id==BlockId::Air || id==BlockId::Water || id==BlockId::Lava ||
@@ -783,12 +802,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 #endif
     { std::ifstream saveFile(MCC_WORLD_SAVE_PATH,std::ios::binary); if(saveFile) world.load(saveFile); }
 
-#if defined(__SWITCH__)
-    // A lighter internal framebuffer gives the Switch GPU more headroom.
-    InitWindow(960,540,"Mine C++ Clone");
-#else
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
-#endif
     SetTargetFPS(60);
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
@@ -874,6 +888,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool creativeOpen=false;
     bool paused=false;
     int pauseSelection=0;
+    bool pauseSettings=false;
+    int settingsSelection=0;
+    float mouseSensitivity=0.0025f;
+    float fieldOfView=70.0f;
+    bool chatOpen=false;
+    std::string chatInput;
+    std::string chatMessage="Press - to open chat";
     std::string saveStatus="World loaded - custom .mcc format";
     bool thirdPerson=false;
     bool captured=true;
@@ -957,18 +978,45 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         const bool gamepad=IsGamepadAvailable(0);
         if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
-            paused=!paused;
-            inventoryOpen=false; creativeOpen=false;
+            paused=!paused; pauseSettings=false;
+            inventoryOpen=false; creativeOpen=false; chatOpen=false;
             captured=!paused;
             if(captured) DisableCursor(); else EnableCursor();
         }
+        if(!paused && gamepad && IsGamepadButtonPressed(0,GAMEPAD_BUTTON_MIDDLE_LEFT)) {
+            chatOpen=!chatOpen; chatInput.clear();
+            captured=!chatOpen;
+            if(captured) DisableCursor(); else EnableCursor();
+        }
+        if(!paused && IsKeyPressed(KEY_ENTER) && !chatOpen) {
+            chatOpen=true; chatInput.clear(); captured=false; EnableCursor();
+        }
+        if(chatOpen) {
+            int key=GetCharPressed();
+            while(key>0) {
+                if(key>=32 && key<127 && chatInput.size()<120) chatInput.push_back(char(key));
+                key=GetCharPressed();
+            }
+            if(IsKeyPressed(KEY_BACKSPACE) && !chatInput.empty()) chatInput.pop_back();
+            if(IsKeyPressed(KEY_ESCAPE)) { chatOpen=false; captured=true; DisableCursor(); }
+            if(IsKeyPressed(KEY_ENTER)) {
+                std::istringstream commandStream(chatInput);
+                std::string command,arg;
+                commandStream>>command>>arg;
+                if(command=="/help") chatMessage="Commands: /help, /gamemode survival, /gamemode creative";
+                else if(command=="/gamemode" && (arg=="creative"||arg=="survival"))
+                    chatMessage=arg=="creative"?"Creative inventory available with Y":"Survival mode active";
+                else if(!chatInput.empty()) chatMessage="Unknown command: "+chatInput;
+                chatOpen=false; chatInput.clear(); captured=true; DisableCursor();
+            }
+        }
         if(paused) {
-            constexpr int PAUSE_ACTIONS=3;
+            constexpr int PAUSE_ACTIONS=4;
             if(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)))
                 pauseSelection=(pauseSelection+PAUSE_ACTIONS-1)%PAUSE_ACTIONS;
             if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)))
                 pauseSelection=(pauseSelection+1)%PAUSE_ACTIONS;
-            const bool confirm=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+            const bool confirm=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
             const Vector2 pauseMouse=GetMousePosition();
             const int menuW=360,menuH=48,menuGap=12;
             const int menuX=GetScreenWidth()/2-menuW/2;
@@ -981,14 +1029,16 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     if(i==0) {
                         paused=false; captured=true; DisableCursor(); pauseSelection=0;
                     } else if(i==1) {
+                        pauseSettings=true; settingsSelection=0;
+                    } else if(i==2) {
                         if(save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected))
                             saveStatus="Saved world and player: world.mcc";
                         else saveStatus="Save failed - storage unavailable";
                     } else {
                         if(save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected)) {
                             saveStatus="Saved world and player: world.mcc";
-                            requestQuit=true;
-                        } else saveStatus="Save failed - exit cancelled";
+                            paused=false; inMenu=true; menuSelection=0; captured=false; EnableCursor();
+                        } else saveStatus="Save failed - return cancelled";
                     }
                     break;
                 }
@@ -997,12 +1047,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 // Leave the loop through the common cleanup path below.
             }
         }
-        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) {
+        if(!paused && !chatOpen && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_LEFT)))) {
             inventoryOpen=!inventoryOpen; creativeOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        if(!paused && IsKeyPressed(KEY_R)) {
+        if(!paused && !chatOpen && (IsKeyPressed(KEY_R)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_UP)))) {
             creativeOpen=!creativeOpen; inventoryOpen=false;
             captured=!creativeOpen;
             if(captured) DisableCursor(); else EnableCursor();
@@ -1012,8 +1062,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(captured) {
             const Vector2 md=GetMouseDelta();
-            yaw+=md.x*0.0025f;
-            pitch=std::clamp(pitch-md.y*0.0025f,-1.45f,1.45f);
+            yaw+=md.x*mouseSensitivity;
+            pitch=std::clamp(pitch-md.y*mouseSensitivity,-1.45f,1.45f);
             if(gamepad) {
                 const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
                 const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
@@ -1037,7 +1087,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB)));
         if(crouching) { moveStrafe*=0.3f; moveForward*=0.3f; }
         const bool jumping=captured && (IsKeyDown(KEY_SPACE) ||
-            (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)));
+            (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)));
         if(!paused && !inventoryOpen && !creativeOpen && captured) physicsAccumulator+=dt;
         else { physicsAccumulator=0.0f; previousForward=false; }
         while(physicsAccumulator>=PLAYER_TICK) {
@@ -1067,10 +1117,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(wheel>0.0f) selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
             else if(wheel<0.0f) selected=(selected+1)%HOTBAR_SIZE;
             if(gamepad) {
-                // L1/R1 cycle the hotbar; analog L2/R2 are reserved for block actions.
-                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1))
+                // D-pad cycles the hotbar; L/R remain dedicated to block actions.
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))
                     selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
-                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1))
+                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))
                     selected=(selected+1)%HOTBAR_SIZE;
             }
         }
@@ -1097,11 +1147,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             camera.position=Vector3{float(px*BLOCK),float((py+eyeHeight)*BLOCK),float(pz*BLOCK)};
             camera.target=Vector3Add(camera.position,Vector3Scale(lookDirection,1.0f));
         }
-        camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
+        camera.up=Vector3{0,1,0}; camera.fovy=fieldOfView; camera.projection=CAMERA_PERSPECTIVE;
 
         Vector3 hit{},previous{};
         const bool hasTarget=ray_block(GetScreenToWorldRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
-        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
@@ -1109,7 +1159,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
-        if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)))) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
@@ -1132,9 +1182,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BeginDrawing();
         ClearBackground(Color{135,190,235,255});
         BeginMode3D(camera);
-        const int minX=std::max(0,int(px)-8),maxX=std::min(size,int(px)+9);
-        const int minZ=std::max(0,int(pz)-8),maxZ=std::min(size,int(pz)+9);
-        const int minY=std::max(0,int(py)-10),maxY=std::min(Chunk::Height-1,int(py)+14);
+        const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
+        const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
+        const int minY=std::max(0,int(py)-18),maxY=std::min(Chunk::Height-1,int(py)+22);
         if(blockTexture.id!=0) {
             const int firstChunkX=minX/Chunk::Width,lastChunkX=maxX/Chunk::Width;
             const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=maxZ/Chunk::Depth;
@@ -1142,6 +1192,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx)
                 for(int section=firstSection;section<=lastSection;++section) {
+                    if(!section_in_frustum(camera,cx,cz,section,GetScreenWidth(),GetScreenHeight())) continue;
                     auto it=std::find_if(runtimeChunkMeshes.begin(),runtimeChunkMeshes.end(),
                         [&](const RuntimeChunkMesh& entry){return entry.x==cx&&entry.z==cz&&entry.section==section;});
                     if(it==runtimeChunkMeshes.end()) {
@@ -1186,7 +1237,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("Move: WASD / left stick | Sprint: CTRL / L-stick | Crouch: SHIFT | Jump: SPACE / B | Hotbar: 9 slots, one step per wheel/L/R",14,GetScreenHeight()-28,13,RAYWHITE);
+        DrawText("WASD / Stick: move | A: jump | B: drop | X: inventory | Y: creative | L: place | R: break | +: pause | -: chat",14,GetScreenHeight()-28,13,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
@@ -1233,17 +1284,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 }
             }
             DrawText("Click a block to put 64 in the selected hotbar slot",panelX+20,panelY+402,14,LIGHTGRAY);
-            DrawText("Page Up / Page Down or L1 / R1: pages    R: close",panelX+20,panelY+430,14,RAYWHITE);
+            DrawText("Page Up / Page Down or L1 / R1: pages    Y: close",panelX+20,panelY+430,14,RAYWHITE);
         }
         if(paused) {
             DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.72f));
             DrawText("GAME MENU",GetScreenWidth()/2-110,GetScreenHeight()/2-145,34,RAYWHITE);
-            const char* pauseLabels[3]={"Continue","Save World","Save and Quit"};
+            const char* pauseLabels[4]={"Continue","Settings","Save World","Save and Return to Title"};
             const int menuW=360,menuH=48,menuGap=12;
             const int menuX=GetScreenWidth()/2-menuW/2;
             const int menuY=GetScreenHeight()/2-70;
             const Vector2 pauseMouse=GetMousePosition();
-            for(int i=0;i<3;++i) {
+            for(int i=0;i<4;++i) {
                 const int y=menuY+i*(menuH+menuGap);
                 const Rectangle item{float(menuX),float(y),float(menuW),float(menuH)};
                 const bool hover=CheckCollisionPointRec(pauseMouse,item);
@@ -1254,16 +1305,47 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
             DrawText(saveStatus.c_str(),GetScreenWidth()/2-MeasureText(saveStatus.c_str(),16)/2,
                      menuY+3*(menuH+menuGap)+4,16,YELLOW);
-            DrawText("D-pad / arrows: select    A / Enter: confirm    B / Esc: resume",
-                     GetScreenWidth()/2-260,menuY+3*(menuH+menuGap)+34,14,RAYWHITE);
-            DrawText("World format: Mine C++ Clone (.mcc) - not Java Anvil",
-                     GetScreenWidth()/2-220,menuY+3*(menuH+menuGap)+58,14,LIGHTGRAY);
+            DrawText("D-pad: select   A / Enter: confirm   B / Esc: resume",
+                     GetScreenWidth()/2-230,menuY+4*(menuH+menuGap)+18,14,RAYWHITE);
+            DrawText("World format: Mine C++ Clone (.mcc)",GetScreenWidth()/2-150,
+                     menuY+4*(menuH+menuGap)+40,14,LIGHTGRAY);
+            if(pauseSettings) {
+                DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.82f));
+                DrawText("SETTINGS",GetScreenWidth()/2-85,GetScreenHeight()/2-105,30,RAYWHITE);
+                const char* settingNames[2]={"Field of view","Mouse sensitivity"};
+                const float values[2]={fieldOfView,mouseSensitivity*1000.0f};
+                for(int i=0;i<2;++i) {
+                    const int y=GetScreenHeight()/2-35+i*58;
+                    DrawText(settingNames[i],GetScreenWidth()/2-190,y,20,RAYWHITE);
+                    DrawText(TextFormat("%.1f",values[i]),GetScreenWidth()/2+100,y,20,YELLOW);
+                }
+                DrawText("Left / Right: change    B / Esc: back",GetScreenWidth()/2-180,
+                         GetScreenHeight()/2+105,15,LIGHTGRAY);
+                if(IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))) {
+                    if(settingsSelection==0) fieldOfView=std::max(50.0f,fieldOfView-5.0f);
+                    else mouseSensitivity=std::max(0.0008f,mouseSensitivity-0.0002f);
+                }
+                if(IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))) {
+                    if(settingsSelection==0) fieldOfView=std::min(110.0f,fieldOfView+5.0f);
+                    else mouseSensitivity=std::min(0.0060f,mouseSensitivity+0.0002f);
+                }
+                if(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))) settingsSelection=0;
+                if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))) settingsSelection=1;
+                if(IsKeyPressed(KEY_ESCAPE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT))) pauseSettings=false;
+            }
+        }
+        if(chatOpen) {
+            DrawRectangle(12,GetScreenHeight()-82,GetScreenWidth()-24,66,Fade(BLACK,0.78f));
+            DrawText(("> "+chatInput+"_").c_str(),24,GetScreenHeight()-70,20,RAYWHITE);
+            DrawText("Enter: send    Esc: close",24,GetScreenHeight()-42,13,LIGHTGRAY);
+        } else if(!chatMessage.empty()) {
+            DrawText(chatMessage.c_str(),14,GetScreenHeight()-50,14,YELLOW);
         }
         if(inventoryOpen) {
             const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             DrawRectangle(panelX,panelY,panelW,panelH,Fade(DARKGRAY,0.96f));
             DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
-            DrawText("INVENTORY - E / Triangle to close",panelX+18,panelY+14,22,RAYWHITE);
+            DrawText("INVENTORY - X to close",panelX+18,panelY+14,22,RAYWHITE);
             for(int i=0;i<INVENTORY_SIZE;++i) {
                 const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
                 DrawRectangle(sx,sy,48,50,Fade(BLACK,0.7f));
@@ -1274,7 +1356,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 }
             }
             DrawText("CRAFTING: recipe area is built into this inventory (recipes coming next)",panelX+18,panelY+252,14,YELLOW);
-            DrawText("Hotbar: keys 1-9 | R: creative menu",panelX+18,panelY+286,14,RAYWHITE);
+            DrawText("Hotbar: keys 1-9 | Y: creative menu",panelX+18,panelY+286,14,RAYWHITE);
         }
         DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
