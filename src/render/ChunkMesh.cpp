@@ -18,8 +18,42 @@ constexpr Face faces[6]={
     {0,0, 1, 0,0,1, {{{1,0,1},{1,1,1},{0,1,1},{0,0,1}}} },
     {0,0,-1,0,0,-1,{{{0,0,0},{0,1,0},{1,1,0},{1,0,0}}} }
 };
+// This mesher emits only axis-aligned full cubes. Non-cube blocks stay on
+// the existing model renderer until their dedicated geometry is supported.
+bool is_full_cube(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    switch(id) {
+        case BlockId::Air:
+        case BlockId::Water:
+        case BlockId::Lava:
+        case BlockId::Torch:
+        case BlockId::Snow:
+        case BlockId::Cactus:
+        case BlockId::OakSlab:
+        case BlockId::SpruceSlab:
+        case BlockId::BirchSlab:
+        case BlockId::JungleSlab:
+        case BlockId::AcaciaSlab:
+        case BlockId::DarkOakSlab:
+        case BlockId::OakFence:
+        case BlockId::SpruceFence:
+        case BlockId::BirchFence:
+        case BlockId::JungleFence:
+        case BlockId::AcaciaFence:
+        case BlockId::DarkOakFence:
+        case BlockId::OakStairs:
+        case BlockId::SpruceStairs:
+        case BlockId::BirchStairs:
+        case BlockId::JungleStairs:
+        case BlockId::AcaciaStairs:
+        case BlockId::DarkOakStairs:
+            return false;
+        default:
+            return mc::world::block_info(id).solid;
+    }
+}
 bool occludes(mc::world::BlockId id) {
-    return id!=mc::world::BlockId::Air && id!=mc::world::BlockId::Water;
+    return is_full_cube(id);
 }
 int axis_of(const std::array<float,3>& edge) {
     for(int axis=0;axis<3;++axis) if(edge[std::size_t(axis)]!=0.0f) return axis;
@@ -65,7 +99,7 @@ ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int c
                 p[vAxis]=vSign>0?v:15-v;
                 const int wx=baseX+p[0],wy=baseY+p[1],wz=baseZ+p[2];
                 const auto id=world.get_block(wx,wy,wz);
-                if(id==mc::world::BlockId::Air || id==mc::world::BlockId::Water) continue;
+                if(!is_full_cube(id)) continue;
                 if(occludes(world.get_block(wx+face.dx,wy+face.dy,wz+face.dz))) continue;
                 mask[std::size_t(v*16+u)]=static_cast<std::uint16_t>(id);
             }
