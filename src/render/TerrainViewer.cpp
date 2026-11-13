@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "../world/World.hpp"
+#include "../world/generation/ChunkGenerator.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,32 +19,6 @@ constexpr float REACH=7.0f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
 struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
-std::uint32_t hash2(int x,int z,std::uint32_t seed) {
-    std::uint32_t h=seed^(std::uint32_t(x)*0x8da6b343u)^(std::uint32_t(z)*0xd8163841u);
-    h^=h>>13; h*=0x85ebca6bu; h^=h>>16; h*=0xc2b2ae35u; h^=h>>16;
-    return h;
-}
-float fade(float t) { return t*t*t*(t*(t*6.0f-15.0f)+10.0f); }
-float lerp(float a,float b,float t) { return a+(b-a)*t; }
-float lattice(int x,int z,std::uint32_t seed) {
-    return (float(hash2(x,z,seed))/float(UINT32_MAX))*2.0f-1.0f;
-}
-float noise(float x,float z,std::uint32_t seed) {
-    const int ix=int(std::floor(x)),iz=int(std::floor(z));
-    const float fx=fade(x-float(ix)),fz=fade(z-float(iz));
-    return lerp(lerp(lattice(ix,iz,seed),lattice(ix+1,iz,seed),fx),
-                  lerp(lattice(ix,iz+1,seed),lattice(ix+1,iz+1,seed),fx),fz);
-}
-float fbm(float x,float z,std::uint32_t seed,int octaves,float frequency) {
-    float v=0,a=1,total=0;
-    for(int i=0;i<octaves;++i) { v+=noise(x*frequency,z*frequency,seed+std::uint32_t(i)*1013u)*a; total+=a; a*=0.5f; frequency*=2.0f; }
-    return v/total;
-}
-int height_at(int x,int z,std::uint32_t seed) {
-    const float broad=fbm(float(x),float(z),seed^0x9e3779b9u,4,0.035f);
-    const float detail=fbm(float(x),float(z),seed,4,0.12f);
-    return std::clamp(int(13.0f+broad*5.0f+detail*2.5f),5,23);
-}
 Color color_for(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch(id) {
@@ -101,15 +76,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     using namespace mc::world;
     const int size=std::clamp(map_size,32,96);
     World world;
-    for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
-        const int h=height_at(x,z,seed);
-        const bool sandy=h<=11;
-        for(int y=0;y<h;++y) {
-            BlockId id=(y==0)?BlockId::Bedrock:(y<h-4?BlockId::Stone:(y<h-1?BlockId::Dirt:(sandy?BlockId::Sand:BlockId::Grass)));
-            world.set_block(x,y,z,id);
-        }
-        if(h<10) for(int y=h;y<11;++y) world.set_block(x,y,z,BlockId::Water);
-    }
+    const ChunkGenerator generator(seed);
+    const int chunkCount=(size+Chunk::Width-1)/Chunk::Width;
+    for(int cz=0;cz<chunkCount;++cz)
+        for(int cx=0;cx<chunkCount;++cx)
+            generator.generate_chunk(world,cx,cz);
 
     { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
 
