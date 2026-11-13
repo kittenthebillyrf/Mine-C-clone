@@ -76,7 +76,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     using namespace mc::world;
     const int size=std::clamp(map_size,256,4096);
     World world;
-    const ChunkGenerator generator(seed);
+    const generation::ChunkGenerator generator(seed);
     const int chunkCount=(size+Chunk::Width-1)/Chunk::Width;
     for(int cz=0;cz<chunkCount;++cz)
         for(int cx=0;cx<chunkCount;++cx)
