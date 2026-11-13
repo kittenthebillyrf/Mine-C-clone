@@ -11,8 +11,8 @@ enum class BlockId : std::uint16_t {
     GoldOre=18, DiamondOre=19, RedstoneOre=20, LapisOre=21, EmeraldOre=22,
     Obsidian=23, Snow=24, Ice=25, Cactus=26, Bookshelf=27, WoolWhite=28,
     Netherrack=29, Glowstone=30, MossyCobblestone=31, Pumpkin=32,
-    CraftingTable=33, Furnace=34, OakSlab=35, OakFence=36,
-    Count=37
+    CraftingTable=33, Furnace=34, OakSlab=35, OakFence=36, Lava=37,
+    Count=38
 };
 inline constexpr std::uint16_t BLOCK_ID_COUNT=static_cast<std::uint16_t>(BlockId::Count);
 struct BlockInfo { BlockId id; std::string_view name; bool solid; };
