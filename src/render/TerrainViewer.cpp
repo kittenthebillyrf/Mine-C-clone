@@ -705,7 +705,7 @@ void save_options_file(int languageIndex,int renderDistanceChunks,int chunkBuild
     if(!output) return;
     output << "MCCOPTIONS 1\n" << available[std::size_t(languageIndex)].code << '\n'
            << renderDistanceChunks << ' ' << chunkBuildsPerFrame << ' '
-           << fieldOfView << ' ' << mouseSensitivity << '\\n';
+           << fieldOfView << ' ' << mouseSensitivity << '\n';
 }
 void load_options_file(int& languageIndex,int& renderDistanceChunks,int& chunkBuildsPerFrame,
                        float& fieldOfView,float& mouseSensitivity) {
