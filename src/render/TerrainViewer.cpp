@@ -380,9 +380,19 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const bool accept=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
             const bool back=IsKeyPressed(KEY_BACKSPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
             if(pauseOptionsOpen) {
+                const int cx=GetScreenWidth()/2, cy=GetScreenHeight()/2;
+                const Rectangle minus{float(cx-150),float(cy-55),52,44};
+                const Rectangle plus{float(cx+98),float(cy-55),52,44};
+                const Vector2 mouse=GetMousePosition();
                 if(back) { pauseOptionsOpen=false; pauseSelection=0; }
                 if(up) cameraFov=std::min(100.0f,cameraFov+2.0f);
                 if(down) cameraFov=std::max(50.0f,cameraFov-2.0f);
+                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    if(CheckCollisionPointRec(mouse,minus)) cameraFov=std::max(50.0f,cameraFov-2.0f);
+                    if(CheckCollisionPointRec(mouse,plus)) cameraFov=std::min(100.0f,cameraFov+2.0f);
+                    if(CheckCollisionPointRec(mouse,Rectangle{float(cx-150),float(cy+55),300,44})) { pauseOptionsOpen=false; pauseSelection=0; }
+                }
+                if(accept) { pauseOptionsOpen=false; pauseSelection=0; }
             } else {
                 if(up) pauseSelection=(pauseSelection+2)%3;
                 if(down) pauseSelection=(pauseSelection+1)%3;
@@ -390,23 +400,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const Vector2 mouse=GetMousePosition();
                 for(int i=0;i<3;++i) {
                     const Rectangle r{float(bx),float(by+i*(bh+gap)),float(bw),float(bh)};
-                    if(CheckCollisionPointRec(mouse,r)) {
-                        pauseSelection=i;
-                        if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                            if(i==0) { paused=false; captured=true; DisableCursor(); }
-                            else if(i==1) { pauseOptionsOpen=true; pauseSelection=0; }
-                            else {
-                                for(const ChunkPos& pos:world.chunk_positions()) world.save_chunk_file(pos.x,pos.z,"world_chunks");
-                                paused=false; pauseOptionsOpen=false; inMenu=true; captured=false; EnableCursor(); menuSelection=0;
-                            }
-                        }
-                    }
+                    const bool hover=CheckCollisionPointRec(mouse,r);
+                    if(hover) pauseSelection=i;
+                    if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) accept; // mouse activation handled below
                 }
-                if(accept) {
+                const bool mouseAccept=IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+                if(accept||mouseAccept) {
                     if(pauseSelection==0) { paused=false; captured=true; DisableCursor(); }
                     else if(pauseSelection==1) { pauseOptionsOpen=true; pauseSelection=0; }
                     else {
                         for(const ChunkPos& pos:world.chunk_positions()) world.save_chunk_file(pos.x,pos.z,"world_chunks");
+                        { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
                         paused=false; pauseOptionsOpen=false; inMenu=true; captured=false; EnableCursor(); menuSelection=0;
                     }
                 }
@@ -590,8 +594,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         Vector3 hit{},previous{};
         const Ray centerRay{camera.position,Vector3Normalize(Vector3Subtract(camera.target,camera.position))};
         const bool hasTarget=ray_block(centerRay,world,hit,previous);
-        const bool miningHeld=IsMouseButtonDown(MOUSE_BUTTON_LEFT)||
-            (gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f);
+        // Keep the two block actions on distinct, digital controls. Trigger axes can
+        // overlap or report a non-zero resting value on some console backends.
+        const bool breakController=gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
+        const bool placeController=gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_2);
+        const bool miningHeld=IsMouseButtonDown(MOUSE_BUTTON_LEFT)||breakController;
+        const bool placingPressed=IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||placeController;
         if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&miningHeld) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId targetBlock=world.get_block(bx,by,bz);
@@ -622,7 +630,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             miningX=miningY=miningZ=-1;
             miningProgress=0.0f;
         }
-        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
+        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&placingPressed&&!miningHeld) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
@@ -675,7 +683,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: R2 / ZR | Place: L2 / ZL | Hotbar: L1/R1 | E: inventory + crafting | R: creative",14,GetScreenHeight()-28,13,RAYWHITE);
+        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: Left mouse / R2-ZR | Place: Right mouse / L2-ZL | Hotbar: L1/R1 | E: inventory + crafting | R: creative",14,GetScreenHeight()-28,13,RAYWHITE);
         if(miningProgress>0.0f) {
             const int w=180,x=GetScreenWidth()/2-w/2,y=GetScreenHeight()/2+28;
             DrawRectangle(x,y,w,8,Fade(BLACK,0.65f));
@@ -706,11 +714,15 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.78f));
             DrawText("GAME MENU",GetScreenWidth()/2-105,GetScreenHeight()/2-190,34,RAYWHITE);
             if(pauseOptionsOpen) {
-                DrawText("SETTINGS",GetScreenWidth()/2-82,GetScreenHeight()/2-115,28,YELLOW);
-                DrawText(TextFormat("Field of view: %.0f",cameraFov),GetScreenWidth()/2-115,GetScreenHeight()/2-42,21,RAYWHITE);
-                DrawText("UP / DOWN: change FOV",GetScreenWidth()/2-120,GetScreenHeight()/2+12,17,LIGHTGRAY);
-                DrawText("BACKSPACE / B: return",GetScreenWidth()/2-128,GetScreenHeight()/2+58,17,LIGHTGRAY);
-                DrawText("PLUS / START: resume game",GetScreenWidth()/2-145,GetScreenHeight()/2+105,16,LIGHTGRAY);
+                const int cx=GetScreenWidth()/2,cy=GetScreenHeight()/2;
+                DrawText("SETTINGS",cx-82,cy-135,28,YELLOW);
+                DrawText(TextFormat("Field of view: %.0f",cameraFov),cx-95,cy-42,21,RAYWHITE);
+                DrawRectangle(cx-150,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy-55,52,44,RAYWHITE); DrawText("-",cx-132,cy-51,30,RAYWHITE);
+                DrawRectangle(cx+98,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy-55,52,44,RAYWHITE); DrawText("+",cx+113,cy-51,30,RAYWHITE);
+                DrawText("UP / DOWN or - / +: change FOV",cx-155,cy+12,17,LIGHTGRAY);
+                DrawRectangle(cx-150,cy+55,300,44,Color{45,45,45,255}); DrawRectangleLines(cx-150,cy+55,300,44,RAYWHITE);
+                DrawText("Back",cx-24,cy+67,18,RAYWHITE);
+                DrawText("B / BACKSPACE: return to game menu",cx-170,cy+112,15,LIGHTGRAY);
             } else {
                 const char* pauseLabels[3]={"Back to Game","Settings","Save & Quit to Main Menu"};
                 const int bw=300,bh=48,gap=12,bx=GetScreenWidth()/2-bw/2,by=GetScreenHeight()/2-5;
