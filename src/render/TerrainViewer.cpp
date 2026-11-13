@@ -1575,10 +1575,21 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             const float renderRadiusSq=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
+            // Build nearest chunks first so the playable area appears before
+            // distant scenery when the per-frame mesh budget is exhausted.
+            std::vector<std::tuple<float,int,int>> orderedChunks;
+            orderedChunks.reserve(std::size_t(lastChunkX-firstChunkX+1)*std::size_t(lastChunkZ-firstChunkZ+1));
             for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx) {
-                const float dx=(float(cx*Chunk::Width+8)-float(px));
-                const float dz=(float(cz*Chunk::Depth+8)-float(pz));
-                if(dx*dx+dz*dz>renderRadiusSq) continue;
+                if(!world.find_chunk(cx,cz)) continue;
+                const float dx=float(cx*Chunk::Width+8)-float(px);
+                const float dz=float(cz*Chunk::Depth+8)-float(pz);
+                const float distanceSq=dx*dx+dz*dz;
+                if(distanceSq<=renderRadiusSq) orderedChunks.emplace_back(distanceSq,cx,cz);
+            }
+            std::sort(orderedChunks.begin(),orderedChunks.end(),
+                [](const auto& a,const auto& b){return std::get<0>(a)<std::get<0>(b);});
+            for(const auto& candidate:orderedChunks) {
+                const int cx=std::get<1>(candidate),cz=std::get<2>(candidate);
                 for(int section=firstSection;section<=lastSection;++section) {
                     if(!section_in_frustum(camera,cx,cz,section,GetScreenWidth(),GetScreenHeight())) continue;
                     const auto key=runtime_mesh_key(cx,cz,section);
@@ -1651,8 +1662,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             for(auto it=runtimeChunkMeshes.begin();it!=runtimeChunkMeshes.end();) {
                 const auto& cached=it->second;
-                const bool visible=cached.x>=firstChunkX&&cached.x<=lastChunkX&&
-                    cached.z>=firstChunkZ&&cached.z<=lastChunkZ&&
+                const float dx=float(cached.x*Chunk::Width+8)-float(px);
+                const float dz=float(cached.z*Chunk::Depth+8)-float(pz);
+                const bool inRadius=dx*dx+dz*dz<=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
+                const bool visible=inRadius&&world.find_chunk(cached.x,cached.z)!=nullptr&&
                     cached.section>=firstSection&&cached.section<=lastSection;
                 if(!visible) {
                     if(cached.model.meshCount>0)UnloadModel(cached.model);
