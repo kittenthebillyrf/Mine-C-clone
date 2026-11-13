@@ -158,9 +158,12 @@ ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int c
                     {origin[0]+dv[0],origin[1]+dv[1],origin[2]+dv[2]},
                     {origin[0]+dv[0]+du[0],origin[1]+dv[1]+du[1],origin[2]+dv[2]+du[2]},
                     {origin[0]+du[0],origin[1]+du[1],origin[2]+du[2]}};
+                const float faceLight=face.ny>0.5f?1.0f:
+                    (face.ny<-0.5f?0.52f:(face.nx!=0.0f?0.78f:0.70f));
+                const auto light=static_cast<std::uint8_t>(faceLight*255.0f);
                 for(const auto& pos:positions) {
                     out.vertices.push_back(ChunkMeshVertex{pos[0],pos[1],pos[2],
-                        face.nx,face.ny,face.nz,id});
+                        face.nx,face.ny,face.nz,id,light});
                 }
                 out.indices.push_back(first);
                 out.indices.push_back(static_cast<std::uint16_t>(first+1));

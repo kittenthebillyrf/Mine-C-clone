@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 #include <sstream>
 #if defined(__SWITCH__)
 #include <switch.h>
@@ -285,10 +286,12 @@ Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
     mesh.vertices=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*3));
     mesh.normals=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*3));
     mesh.texcoords=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*2));
+    mesh.colors=static_cast<unsigned char*>(MemAlloc(sizeof(unsigned char)*data.vertices.size()*4));
     mesh.indices=static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short)*data.indices.size()));
-    if(!mesh.vertices||!mesh.normals||!mesh.texcoords||!mesh.indices) {
+    if(!mesh.vertices||!mesh.normals||!mesh.texcoords||!mesh.colors||!mesh.indices) {
         if(mesh.vertices)MemFree(mesh.vertices);if(mesh.normals)MemFree(mesh.normals);
-        if(mesh.texcoords)MemFree(mesh.texcoords);if(mesh.indices)MemFree(mesh.indices);
+        if(mesh.texcoords)MemFree(mesh.texcoords);if(mesh.colors)MemFree(mesh.colors);
+        if(mesh.indices)MemFree(mesh.indices);
         return Model{};
     }
     for(std::size_t face=0;face+3<data.vertices.size();face+=4) {
@@ -317,6 +320,10 @@ Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
             mesh.normals[index*3+0]=vertex.nx;
             mesh.normals[index*3+1]=vertex.ny;
             mesh.normals[index*3+2]=vertex.nz;
+            mesh.colors[index*4+0]=vertex.light;
+            mesh.colors[index*4+1]=vertex.light;
+            mesh.colors[index*4+2]=vertex.light;
+            mesh.colors[index*4+3]=255;
             const Vector2 uv=raw_uv(vertex);
             const float localU=(uv.x-minU)/du,localV=(uv.y-minV)/dv;
             mesh.texcoords[index*2+0]=(tileX+0.001f+localU*0.998f)/16.0f;
@@ -337,6 +344,11 @@ struct RuntimeChunkMesh {
     ChunkMeshData data;
     Model model{};
 };
+std::uint64_t runtime_mesh_key(int x,int z,int section) {
+    return (std::uint64_t(static_cast<std::uint32_t>(x))<<32) |
+           (std::uint64_t(static_cast<std::uint32_t>(z))<<8) |
+           std::uint64_t(static_cast<std::uint32_t>(section));
+}
 bool section_in_frustum(const Camera3D& camera,int cx,int cz,int section,int screenWidth,int screenHeight) {
     const Vector3 forward=Vector3Normalize(Vector3Subtract(camera.target,camera.position));
     const Vector3 right=Vector3Normalize(Vector3CrossProduct(forward,camera.up));
@@ -983,8 +995,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 #endif
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
-    std::vector<RuntimeChunkMesh> runtimeChunkMeshes;
-    runtimeChunkMeshes.reserve(256);
+    std::unordered_map<std::uint64_t,RuntimeChunkMesh> runtimeChunkMeshes;
+    runtimeChunkMeshes.reserve(512);
 #if defined(__SWITCH__)
     // NROs do not expose romfs paths until the filesystem is mounted.
     romfsInit();
@@ -1525,24 +1537,24 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx)
                 for(int section=firstSection;section<=lastSection;++section) {
                     if(!section_in_frustum(camera,cx,cz,section,GetScreenWidth(),GetScreenHeight())) continue;
-                    auto it=std::find_if(runtimeChunkMeshes.begin(),runtimeChunkMeshes.end(),
-                        [&](const RuntimeChunkMesh& entry){return entry.x==cx&&entry.z==cz&&entry.section==section;});
-                    if(it==runtimeChunkMeshes.end()) {
-                        runtimeChunkMeshes.push_back(RuntimeChunkMesh{});
-                        it=std::prev(runtimeChunkMeshes.end());
-                        it->x=cx;it->z=cz;it->section=section;
+                    const auto key=runtime_mesh_key(cx,cz,section);
+                    auto inserted=runtimeChunkMeshes.try_emplace(key);
+                    auto it=inserted.first;
+                    if(inserted.second) {
+                        it->second.x=cx;it->second.z=cz;it->second.section=section;
                     }
-                    if(!it->data.is_current(world,cx,cz)) {
+                    RuntimeChunkMesh& cached=it->second;
+                    if(!cached.data.is_current(world,cx,cz)) {
                         if(chunkBuildsThisFrame>=chunkBuildsPerFrame) {
-                            if(it->model.meshCount>0) DrawModel(it->model,Vector3{0,0,0},1.0f,WHITE);
+                            if(cached.model.meshCount>0) DrawModel(cached.model,Vector3{0,0,0},1.0f,WHITE);
                             continue;
                         }
-                        if(it->model.meshCount>0) UnloadModel(it->model);
-                        it->data=ChunkMeshBuilder::build(world,cx,cz,section);
-                        it->model=make_chunk_model(it->data,blockTexture);
+                        if(cached.model.meshCount>0) UnloadModel(cached.model);
+                        cached.data=ChunkMeshBuilder::build(world,cx,cz,section);
+                        cached.model=make_chunk_model(cached.data,blockTexture);
                         ++chunkBuildsThisFrame;
                     }
-                    if(it->model.meshCount>0) DrawModel(it->model,Vector3{0,0,0},1.0f,WHITE);
+                    if(cached.model.meshCount>0) DrawModel(cached.model,Vector3{0,0,0},1.0f,WHITE);
                 }
         }
         for(const auto& dropped:droppedItems)
@@ -1564,11 +1576,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             for(auto it=runtimeChunkMeshes.begin();it!=runtimeChunkMeshes.end();) {
-                const bool visible=it->x>=firstChunkX&&it->x<=lastChunkX&&
-                    it->z>=firstChunkZ&&it->z<=lastChunkZ&&
-                    it->section>=firstSection&&it->section<=lastSection;
+                const auto& cached=it->second;
+                const bool visible=cached.x>=firstChunkX&&cached.x<=lastChunkX&&
+                    cached.z>=firstChunkZ&&cached.z<=lastChunkZ&&
+                    cached.section>=firstSection&&cached.section<=lastSection;
                 if(!visible) {
-                    if(it->model.meshCount>0)UnloadModel(it->model);
+                    if(cached.model.meshCount>0)UnloadModel(cached.model);
                     it=runtimeChunkMeshes.erase(it);
                 } else ++it;
             }
@@ -1726,7 +1739,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(requestQuit) break;
     }
     if(!requestQuit) save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
-    for(auto& cached:runtimeChunkMeshes) if(cached.model.meshCount>0) UnloadModel(cached.model);
+    for(auto& entry:runtimeChunkMeshes)
+        if(entry.second.model.meshCount>0) UnloadModel(entry.second.model);
     for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) {
         if(blockModels[i].meshCount>0) {
             for(int material=0;material<blockModels[i].materialCount;++material)

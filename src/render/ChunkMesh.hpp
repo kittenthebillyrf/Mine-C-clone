@@ -9,6 +9,7 @@ struct ChunkMeshVertex {
     float x=0, y=0, z=0;
     float nx=0, ny=0, nz=0;
     std::uint16_t block_id=0;
+    std::uint8_t light=255;
 };
 struct ChunkMeshData {
     std::vector<ChunkMeshVertex> vertices;
