@@ -304,7 +304,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
 
         Vector3 hit{},previous{};
-        const bool hasTarget=ray_block(GetMouseRay(Vector2{float(GetScreenWidth())*0.5f,float(GetScreenHeight())*0.5f},camera),world,hit,previous);
+        const Ray centerRay{camera.position,Vector3Normalize(Vector3Subtract(camera.target,camera.position))};
+        const bool hasTarget=ray_block(centerRay,world,hit,previous);
         if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
