@@ -1,5 +1,5 @@
 #pragma once
-#include "World.hpp"
+#include "../World.hpp"
 #include <cstdint>
 
 namespace mc::world::generation {
