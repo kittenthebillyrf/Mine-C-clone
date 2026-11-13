@@ -132,7 +132,6 @@ ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int c
                 p[normalAxis]=slice;
                 p[uAxis]=uSign>0?u:15-u;
                 p[vAxis]=vSign>0?v:15-v;
-                const int wx=baseX+p[0],wy=baseY+p[1],wz=baseZ+p[2];
                 const auto id=chunk->get_unchecked(p[0],p[1],p[2]);
                 if(!full_cube(id)) continue;
                 if(occludes(get_neighbor(p[0]+face.dx,p[1]+face.dy,p[2]+face.dz))) continue;
