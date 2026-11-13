@@ -979,7 +979,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                         if(save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected))
                             saveStatus="Saved world and player: world.mcc";
                         else saveStatus="Save failed - storage unavailable";
-                        else saveStatus="Save failed - storage unavailable";
                     } else {
                         if(save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected)) {
                             saveStatus="Saved world and player: world.mcc";
