@@ -262,8 +262,12 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
         const BiomeTerrain112 biome=biome_at(wx*4,wz*4);
         const int depth=int(surface_noise[std::size_t(x)*16+z]/3.0+3.0+surface_random.next_double()*0.25);
         int remaining=-1;
+        // Java 1.12 chooses one bedrock depth per X/Z column, not a new
+        // random threshold at every Y. Sampling inside the Y loop creates
+        // scattered floating bedrock layers throughout the entire world.
+        const int bedrockDepth=surface_random.next_int(5);
         for(int y=255;y>=0;--y) {
-            if(y<=surface_random.next_int(5)) { world.set_block(wx,y,wz,BlockId::Bedrock); continue; }
+            if(y<=bedrockDepth) { world.set_block(wx,y,wz,BlockId::Bedrock); continue; }
             const BlockId current=world.get_block(wx,y,wz);
             if(current==BlockId::Air) remaining=-1;
             else if(current==BlockId::Stone) {
