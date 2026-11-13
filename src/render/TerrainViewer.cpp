@@ -350,7 +350,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     DrawText(TextFormat("%i",inventory[i].count),sx+27,sy+34,12,RAYWHITE);
                 }
             }
-            DrawText("CRAFTING: recipe area is built into this inventory (recipes coming next)",panelX+18,panelY+252,14,YELLOW);\n            DrawText("Hotbar: keys 1-9 | R: creative menu",panelX+18,panelY+286,14,RAYWHITE);
+            DrawText("CRAFTING: recipe area is built into this inventory (recipes coming next)",panelX+18,panelY+252,14,YELLOW);
+            DrawText("Hotbar: keys 1-9 | R: creative menu",panelX+18,panelY+286,14,RAYWHITE);
         }
         DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py/BLOCK,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
