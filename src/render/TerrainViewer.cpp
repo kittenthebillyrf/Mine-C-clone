@@ -51,7 +51,7 @@ constexpr float EYE_HEIGHT=1.62f;
 constexpr float PLAYER_WIDTH=0.6f;
 constexpr double PLAYER_STEP_HEIGHT=0.6;
 constexpr float PLAYER_TICK=1.0f/20.0f;
-constexpr float REACH=7.0f;
+constexpr float REACH=10.0f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
 struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
@@ -888,7 +888,7 @@ void load_options_file(int& languageIndex,int& renderDistanceChunks,int& chunkBu
         [&](const mc::i18n::Language& item){return item.code==code;});
     if(found!=available.end()) languageIndex=int(std::distance(available.begin(),found));
     renderDistanceChunks=std::clamp(distance,2,16);
-    chunkBuildsPerFrame=std::clamp(builds,1,8);
+    chunkBuildsPerFrame=std::clamp(builds,1,4);
     fieldOfView=std::clamp(fov,50.0f,110.0f);
     mouseSensitivity=std::clamp(sensitivity,0.0008f,0.0060f);
     fpsLimit=(loadedFps<=30?30:(loadedFps<=60?60:120));
@@ -1086,7 +1086,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 #endif
     int languageIndex=1; // Russian is the first-run default; five supported languages remain selectable.
     int renderDistanceChunks=6;
-    int chunkBuildsPerFrame=4;
+    int chunkBuildsPerFrame=2;
     float mouseSensitivity=0.0025f;
     float fieldOfView=70.0f;
     int fpsLimit=60;
@@ -1796,6 +1796,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
         }
         EndMode3D();
+        // Minecraft-style underwater overlay: tint the whole view only while the camera/eyes are submerged.
+        const int eyeBlockX=int(std::floor(px));
+        const int eyeBlockY=int(std::floor(py+EYE_HEIGHT));
+        const int eyeBlockZ=int(std::floor(pz));
+        if(world.get_block(eyeBlockX,eyeBlockY,eyeBlockZ)==BlockId::Water)
+            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Color{35,105,220,78});
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText(TextFormat("World: %ix%i  |  Loaded chunks: %i",size,size,int(world.chunk_count())),14,48,14,RAYWHITE);

@@ -274,7 +274,15 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
 
     // Surface layers: desert sand, snowy snow, and grass/dirt elsewhere.
     const auto surface_noise=surface_->generate_region(ox,0,oz,16,1,16,0.0625,1.0,0.0625);
-    const std::uint64_t chunk_seed=std::uint64_t(cx)*341873128712ULL+std::uint64_t(cz)*132897987541ULL;
+    // Mix the world seed into every chunk's random stream. Previously surface decoration
+    // reused identical chunk streams in every world, causing repeated patterns and
+    // generation that did not respond correctly to the selected seed.
+    std::uint64_t chunk_seed=static_cast<std::uint64_t>(seed_);
+    chunk_seed^=std::uint64_t(static_cast<std::uint32_t>(cx))*0x9E3779B185EBCA87ULL;
+    chunk_seed^=std::uint64_t(static_cast<std::uint32_t>(cz))*0xC2B2AE3D27D4EB4FULL;
+    chunk_seed^=chunk_seed>>30; chunk_seed*=0xBF58476D1CE4E5B9ULL;
+    chunk_seed^=chunk_seed>>27; chunk_seed*=0x94D049BB133111EBULL;
+    chunk_seed^=chunk_seed>>31;
     JavaRandom surface_random(static_cast<std::int64_t>(chunk_seed));
     for(int x=0;x<16;++x) for(int z=0;z<16;++z) {
         const int wx=ox+x,wz=oz+z;
