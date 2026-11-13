@@ -685,6 +685,7 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
+bool replace_saved_file(const std::string& temporary,const std::string& destination);
 std::string chunk_file_path(int cx,int cz) {
     return std::string(MCC_CHUNK_SAVE_PREFIX)+std::to_string(cx)+"_"+std::to_string(cz)+".mccchunk";
 }
@@ -714,7 +715,7 @@ bool unload_chunk_to_sidecar(mc::world::World& world,int cx,int cz) {
         output.flush();
         if(!output) { output.close(); std::remove(temporary.c_str()); return false; }
     }
-    if(std::rename(temporary.c_str(),path.c_str())!=0) {
+    if(!replace_saved_file(temporary,path)) {
         std::remove(temporary.c_str()); return false;
     }
     world.erase_chunk(cx,cz);
@@ -1490,8 +1491,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int minY=std::max(0,int(py)-18),maxY=std::min(Chunk::Height-1,int(py)+22);
         int chunkBuildsThisFrame=0;
         if(blockTexture.id!=0) {
-            const int firstChunkX=minX/Chunk::Width,lastChunkX=maxX/Chunk::Width;
-            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=maxZ/Chunk::Depth;
+            const int firstChunkX=minX/Chunk::Width,lastChunkX=std::max(minX,maxX-1)/Chunk::Width;
+            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=std::max(minZ,maxZ-1)/Chunk::Depth;
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx)
@@ -1531,8 +1532,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
             }
         if(blockTexture.id!=0) {
-            const int firstChunkX=minX/Chunk::Width,lastChunkX=maxX/Chunk::Width;
-            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=maxZ/Chunk::Depth;
+            const int firstChunkX=minX/Chunk::Width,lastChunkX=std::max(minX,maxX-1)/Chunk::Width;
+            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=std::max(minZ,maxZ-1)/Chunk::Depth;
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             for(auto it=runtimeChunkMeshes.begin();it!=runtimeChunkMeshes.end();) {
@@ -1548,7 +1549,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
-        DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
+        DrawText(TextFormat("World: %ix%i  |  Loaded chunks: %i",size,size,int(world.chunk_count())),14,48,14,RAYWHITE);
         DrawText("A: jump | B: drop | X: inventory | Y: creative | ZL: place | ZR: break | L/R: hotbar | +: pause | -: chat",14,GetScreenHeight()-28,13,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
