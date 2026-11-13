@@ -9,12 +9,16 @@
 #include <cstdint>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace mc::render {
 namespace {
 constexpr float BLOCK=2.0f;
-constexpr float PLAYER_HEIGHT=3.6f;
-constexpr float EYE_HEIGHT=3.15f;
+constexpr float PLAYER_HEIGHT=1.8f;
+constexpr float EYE_HEIGHT=1.62f;
+constexpr float PLAYER_WIDTH=0.6f;
+constexpr double PLAYER_STEP_HEIGHT=0.6;
+constexpr float PLAYER_TICK=1.0f/20.0f;
 constexpr float REACH=7.0f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
@@ -184,38 +188,303 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
+struct PlayerAabb {
+    double minX,minY,minZ,maxX,maxY,maxZ;
+    PlayerAabb offset(double x,double y,double z) const {
+        return {minX+x,minY+y,minZ+z,maxX+x,maxY+y,maxZ+z};
+    }
+    PlayerAabb expand(double x,double y,double z) const {
+        PlayerAabb out=*this;
+        if(x<0.0) out.minX+=x; else out.maxX+=x;
+        if(y<0.0) out.minY+=y; else out.maxY+=y;
+        if(z<0.0) out.minZ+=z; else out.maxZ+=z;
+        return out;
+    }
+};
+PlayerAabb player_box(double x,double feetY,double z) {
+    constexpr double half=double(PLAYER_WIDTH)*0.5;
+    return {x-half,feetY,z-half,x+half,feetY+PLAYER_HEIGHT,z+half};
+}
+bool intersects(const PlayerAabb& a,const PlayerAabb& b) {
+    return a.maxX>b.minX && a.minX<b.maxX &&
+           a.maxY>b.minY && a.minY<b.maxY &&
+           a.maxZ>b.minZ && a.minZ<b.maxZ;
+}
 bool is_solid(mc::world::BlockId id) {
     return id!=mc::world::BlockId::Air && mc::world::block_info(id).solid;
 }
-bool player_collides(const mc::world::World& world,float x,float feetY,float z) {
-    constexpr float radius=0.30f;
-    constexpr float height=PLAYER_HEIGHT;
-    const int minX=int(std::floor(x-radius));
-    const int maxX=int(std::floor(x+radius));
-    const int minZ=int(std::floor(z-radius));
-    const int maxZ=int(std::floor(z+radius));
-    const int minY=int(std::floor(feetY/BLOCK));
-    const int maxY=int(std::floor((feetY+height-0.001f)/BLOCK));
-    for(int by=minY;by<=maxY;++by)
-        for(int bz=minZ;bz<=maxZ;++bz)
-            for(int bx=minX;bx<=maxX;++bx)
-                if(is_solid(world.get_block(bx,by,bz))) return true;
-    return false;
-}
-float player_ground_height(const mc::world::World& world,float x,float z) {
-    constexpr float radius=0.28f;
-    float highest=0.0f;
-    const int xs[2]={int(std::floor(x-radius)),int(std::floor(x+radius))};
-    const int zs[2]={int(std::floor(z-radius)),int(std::floor(z+radius))};
-    for(int bx:xs) for(int bz:zs) {
-        for(int by=mc::world::Chunk::Height-1;by>=0;--by) {
-            if(is_solid(world.get_block(bx,by,bz))) {
-                highest=std::max(highest,float(by+1)*BLOCK);
-                break;
+std::vector<PlayerAabb> collision_boxes(const mc::world::World& world,const PlayerAabb& query) {
+    std::vector<PlayerAabb> boxes;
+    const int minX=int(std::floor(query.minX)),maxX=int(std::floor(query.maxX));
+    const int minY=std::max(0,int(std::floor(query.minY)));
+    const int maxY=std::min(mc::world::Chunk::Height-1,int(std::floor(query.maxY)));
+    const int minZ=int(std::floor(query.minZ)),maxZ=int(std::floor(query.maxZ));
+    for(int y=minY;y<=maxY;++y)
+        for(int z=minZ;z<=maxZ;++z)
+            for(int x=minX;x<=maxX;++x) {
+                if(!is_solid(world.get_block(x,y,z))) continue;
+                const PlayerAabb block{double(x),double(y),double(z),double(x+1),double(y+1),double(z+1)};
+                if(intersects(block,query)) boxes.push_back(block);
             }
+    return boxes;
+}
+double clip_y(const PlayerAabb& obstacle,const PlayerAabb& moving,double offset) {
+    if(obstacle.maxX>moving.minX && obstacle.minX<moving.maxX &&
+       obstacle.maxZ>moving.minZ && obstacle.minZ<moving.maxZ) {
+        if(offset>0.0 && moving.maxY<=obstacle.minY)
+            offset=std::min(offset,obstacle.minY-moving.maxY);
+        else if(offset<0.0 && moving.minY>=obstacle.maxY)
+            offset=std::max(offset,obstacle.maxY-moving.minY);
+    }
+    return offset;
+}
+double clip_x(const PlayerAabb& obstacle,const PlayerAabb& moving,double offset) {
+    if(obstacle.maxY>moving.minY && obstacle.minY<moving.maxY &&
+       obstacle.maxZ>moving.minZ && obstacle.minZ<moving.maxZ) {
+        if(offset>0.0 && moving.maxX<=obstacle.minX)
+            offset=std::min(offset,obstacle.minX-moving.maxX);
+        else if(offset<0.0 && moving.minX>=obstacle.maxX)
+            offset=std::max(offset,obstacle.maxX-moving.minX);
+    }
+    return offset;
+}
+double clip_z(const PlayerAabb& obstacle,const PlayerAabb& moving,double offset) {
+    if(obstacle.maxX>moving.minX && obstacle.minX<moving.maxX &&
+       obstacle.maxY>moving.minY && obstacle.minY<moving.maxY) {
+        if(offset>0.0 && moving.maxZ<=obstacle.minZ)
+            offset=std::min(offset,obstacle.minZ-moving.maxZ);
+        else if(offset<0.0 && moving.minZ>=obstacle.maxZ)
+            offset=std::max(offset,obstacle.maxZ-moving.minZ);
+    }
+    return offset;
+}
+bool overlaps_liquid(const mc::world::World& world,const PlayerAabb& query) {
+    const int minX=int(std::floor(query.minX)),maxX=int(std::floor(query.maxX));
+    const int minY=std::max(0,int(std::floor(query.minY)));
+    const int maxY=std::min(mc::world::Chunk::Height-1,int(std::floor(query.maxY)));
+    const int minZ=int(std::floor(query.minZ)),maxZ=int(std::floor(query.maxZ));
+    for(int y=minY;y<=maxY;++y) for(int z=minZ;z<=maxZ;++z) for(int x=minX;x<=maxX;++x) {
+        const auto id=world.get_block(x,y,z);
+        if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Lava) {
+            const PlayerAabb liquid{double(x),double(y),double(z),double(x+1),double(y+1),double(z+1)};
+            if(intersects(liquid,query)) return true;
         }
     }
-    return highest;
+    return false;
+}
+bool in_water(const mc::world::World& world,double x,double y,double z) {
+    const PlayerAabb b=player_box(x,y,z);
+    return overlaps_liquid(world,{b.minX+0.001,b.minY+0.401,b.minZ+0.001,
+                                  b.maxX-0.001,b.maxY-0.401,b.maxZ-0.001}) &&
+           [&]() {
+               const PlayerAabb q{b.minX+0.001,b.minY+0.401,b.minZ+0.001,
+                                  b.maxX-0.001,b.maxY-0.401,b.maxZ-0.001};
+               for(int by=std::max(0,int(std::floor(q.minY)));by<=std::min(mc::world::Chunk::Height-1,int(std::floor(q.maxY)));++by)
+                   for(int bz=int(std::floor(q.minZ));bz<=int(std::floor(q.maxZ));++bz)
+                       for(int bx=int(std::floor(q.minX));bx<=int(std::floor(q.maxX));++bx)
+                           if(world.get_block(bx,by,bz)==mc::world::BlockId::Water &&
+                              intersects({double(bx),double(by),double(bz),double(bx+1),double(by+1),double(bz+1)},q)) return true;
+               return false;
+           }();
+}
+bool in_lava(const mc::world::World& world,double x,double y,double z) {
+    const PlayerAabb b=player_box(x,y,z);
+    const PlayerAabb q{b.minX+0.1,b.minY+0.4,b.minZ+0.1,b.maxX-0.1,b.maxY-0.4,b.maxZ-0.1};
+    const int minX=int(std::floor(q.minX)),maxX=int(std::floor(q.maxX));
+    const int minY=std::max(0,int(std::floor(q.minY))),maxY=std::min(mc::world::Chunk::Height-1,int(std::floor(q.maxY)));
+    const int minZ=int(std::floor(q.minZ)),maxZ=int(std::floor(q.maxZ));
+    for(int by=minY;by<=maxY;++by) for(int bz=minZ;bz<=maxZ;++bz) for(int bx=minX;bx<=maxX;++bx)
+        if(world.get_block(bx,by,bz)==mc::world::BlockId::Lava &&
+           intersects({double(bx),double(by),double(bz),double(bx+1),double(by+1),double(bz+1)},q)) return true;
+    return false;
+}
+bool offset_position_is_liquid(const mc::world::World& world,double x,double y,double z,const PlayerAabb& box) {
+    const PlayerAabb moved=box.offset(x,y,z);
+    return collision_boxes(world,moved).empty() && !overlaps_liquid(world,moved);
+}
+bool move_player_entity(const mc::world::World& world,double& px,double& py,double& pz,
+                        double& dx,double& dy,double& dz,bool sneaking,bool wasOnGround,
+                        bool& collidedHorizontally,bool& collidedVertically,bool& onGround) {
+    PlayerAabb box=player_box(px,py,pz);
+    double requestedX=dx,requestedY=dy,requestedZ=dz;
+    double stepX=dx,stepZ=dz;
+    if(sneaking && wasOnGround) {
+        while(dx!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,0.0)).empty()) {
+            if(dx>-0.05 && dx<0.05) dx=0.0;
+            else if(dx>0.0) dx-=0.05;
+            else dx+=0.05;
+        }
+        stepX=dx;
+        while(dz!=0.0 && collision_boxes(world,box.offset(0.0,-PLAYER_STEP_HEIGHT,dz)).empty()) {
+            if(dz>-0.05 && dz<0.05) dz=0.0;
+            else if(dz>0.0) dz-=0.05;
+            else dz+=0.05;
+        }
+        stepZ=dz;
+        while(dx!=0.0 && dz!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,dz)).empty()) {
+            if(dx>-0.05 && dx<0.05) dx=0.0;
+            else if(dx>0.0) dx-=0.05;
+            else dx+=0.05;
+            stepX=dx;
+            if(dz>-0.05 && dz<0.05) dz=0.0;
+            else if(dz>0.0) dz-=0.05;
+            else dz+=0.05;
+            stepZ=dz;
+        }
+        stepX=dx; stepZ=dz;
+    }
+    const double originalY=dy;
+    const double originalStepX=dx,originalStepZ=dz;
+    const auto obstacles=collision_boxes(world,box.expand(dx,dy,dz));
+    const PlayerAabb originalBox=box;
+    for(const auto& obstacle:obstacles) dy=clip_y(obstacle,box,dy);
+    box=box.offset(0.0,dy,0.0);
+    for(const auto& obstacle:obstacles) dx=clip_x(obstacle,box,dx);
+    box=box.offset(dx,0.0,0.0);
+    for(const auto& obstacle:obstacles) dz=clip_z(obstacle,box,dz);
+    box=box.offset(0.0,0.0,dz);
+    const bool canStep=wasOnGround || (originalY!=dy && originalY<0.0);
+    if(PLAYER_STEP_HEIGHT>0.0 && canStep && (originalStepX!=dx || originalStepZ!=dz)) {
+        const double normalX=dx,normalY=dy,normalZ=dz;
+        const PlayerAabb normalBox=box;
+        auto stepObstacles=collision_boxes(world,originalBox.expand(originalStepX,PLAYER_STEP_HEIGHT,originalStepZ));
+        PlayerAabb candidateA=originalBox;
+        const PlayerAabb candidateAForY=candidateA.expand(originalStepX,0.0,originalStepZ);
+        double upA=PLAYER_STEP_HEIGHT;
+        for(const auto& obstacle:stepObstacles) upA=clip_y(obstacle,candidateAForY,upA);
+        candidateA=candidateA.offset(0.0,upA,0.0);
+        double moveAX=originalStepX;
+        for(const auto& obstacle:stepObstacles) moveAX=clip_x(obstacle,candidateA,moveAX);
+        candidateA=candidateA.offset(moveAX,0.0,0.0);
+        double moveAZ=originalStepZ;
+        for(const auto& obstacle:stepObstacles) moveAZ=clip_z(obstacle,candidateA,moveAZ);
+        candidateA=candidateA.offset(0.0,0.0,moveAZ);
+
+        PlayerAabb candidateB=originalBox;
+        double upB=PLAYER_STEP_HEIGHT;
+        for(const auto& obstacle:stepObstacles) upB=clip_y(obstacle,candidateB,upB);
+        candidateB=candidateB.offset(0.0,upB,0.0);
+        double moveBX=originalStepX;
+        for(const auto& obstacle:stepObstacles) moveBX=clip_x(obstacle,candidateB,moveBX);
+        candidateB=candidateB.offset(moveBX,0.0,0.0);
+        double moveBZ=originalStepZ;
+        for(const auto& obstacle:stepObstacles) moveBZ=clip_z(obstacle,candidateB,moveBZ);
+        candidateB=candidateB.offset(0.0,0.0,moveBZ);
+
+        const double distA=moveAX*moveAX+moveAZ*moveAZ;
+        const double distB=moveBX*moveBX+moveBZ*moveBZ;
+        if(distA>distB) {
+            dx=moveAX; dz=moveAZ; dy=-upA; box=candidateA;
+        } else {
+            dx=moveBX; dz=moveBZ; dy=-upB; box=candidateB;
+        }
+        for(const auto& obstacle:stepObstacles) dy=clip_y(obstacle,box,dy);
+        box=box.offset(0.0,dy,0.0);
+        if(normalX*normalX+normalZ*normalZ>=dx*dx+dz*dz) {
+            dx=normalX; dy=normalY; dz=normalZ; box=normalBox;
+        }
+    }
+    collidedHorizontally=(originalStepX!=dx || originalStepZ!=dz);
+    collidedVertically=(originalY!=dy);
+    onGround=collidedVertically && originalY<0.0;
+    if(collidedHorizontally) { /* motion is zeroed by caller */ }
+    px=(box.minX+box.maxX)*0.5;
+    py=box.minY;
+    pz=(box.minZ+box.maxZ)*0.5;
+    return true;
+}
+void move_relative(double& motionX,double& motionY,double& motionZ,
+                   float strafe,float up,float forward,float friction,float yaw) {
+    float lengthSq=strafe*strafe+up*up+forward*forward;
+    if(lengthSq>=1.0e-4F) {
+        float length=std::sqrt(lengthSq);
+        if(length<1.0F) length=1.0F;
+        const float scale=friction/length;
+        strafe*=scale; up*=scale; forward*=scale;
+        const float sinYaw=std::sin(yaw*0.017453292F);
+        const float cosYaw=std::cos(yaw*0.017453292F);
+        motionX+=double(strafe*cosYaw-forward*sinYaw);
+        motionY+=double(up);
+        motionZ+=double(forward*cosYaw+strafe*sinYaw);
+    }
+}
+float block_slipperiness(mc::world::BlockId id) {
+    return id==mc::world::BlockId::Ice ? 0.98F : 0.6F;
+}
+void tick_vanilla_player(const mc::world::World& world,double& px,double& py,double& pz,
+                         double& motionX,double& motionY,double& motionZ,bool& onGround,
+                         bool& collidedHorizontally,int& jumpTicks,float moveStrafe,float moveForward,
+                         bool jumping,bool sneaking,bool sprinting,float cameraYaw) {
+    if(jumpTicks>0) --jumpTicks;
+    // EntityLivingBase.onLivingUpdate(): client-side inertial damping and tiny-motion cutoff.
+    motionX*=0.98; motionY*=0.98; motionZ*=0.98;
+    if(std::abs(motionX)<0.003) motionX=0.0;
+    if(std::abs(motionY)<0.003) motionY=0.0;
+    if(std::abs(motionZ)<0.003) motionZ=0.0;
+
+    const bool water=in_water(world,px,py,pz);
+    const bool lava=in_lava(world,px,py,pz);
+    if(!jumping) jumpTicks=0;
+    else if(water || lava) motionY+=0.03999999910593033;
+    else if(onGround && jumpTicks==0) {
+        // EntityLivingBase.jump(): exact 1.12.2 base impulse and sprint impulse.
+        motionY=0.42;
+        if(sprinting) {
+            const float mcYaw=(cameraYaw+3.14159265358979323846F)*0.017453292F;
+            motionX-=double(std::sin(mcYaw)*0.2F);
+            motionZ+=double(std::cos(mcYaw)*0.2F);
+        }
+        jumpTicks=10;
+    }
+
+    moveStrafe*=0.98F;
+    moveForward*=0.98F;
+    const float mcYaw=cameraYaw+180.0F;
+    if(water) {
+        const double oldY=py;
+        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYaw);
+        const double requestedX=motionX,requestedY=motionY,requestedZ=motionZ;
+        bool cH=false,cV=false;
+        move_player_entity(world,px,py,pz,motionX,motionY,motionZ,sneaking,onGround,cH,cV,onGround);
+        if(cH) motionX=motionZ=0.0;
+        if(cV) motionY=0.0;
+        motionX*=0.8; motionY*=0.800000011920929; motionZ*=0.8;
+        motionY-=0.02;
+        if(cH && offset_position_is_liquid(world,motionX,motionY+0.6000000238418579-py+oldY,motionZ,player_box(px,py,pz)))
+            motionY=0.30000001192092896;
+        collidedHorizontally=cH;
+        (void)requestedX; (void)requestedY; (void)requestedZ;
+    } else if(lava) {
+        const double oldY=py;
+        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYaw);
+        bool cH=false,cV=false;
+        move_player_entity(world,px,py,pz,motionX,motionY,motionZ,sneaking,onGround,cH,cV,onGround);
+        if(cH) motionX=motionZ=0.0;
+        if(cV) motionY=0.0;
+        motionX*=0.5; motionY*=0.5; motionZ*=0.5;
+        motionY-=0.02;
+        if(cH && offset_position_is_liquid(world,motionX,motionY+0.6000000238418579-py+oldY,motionZ,player_box(px,py,pz)))
+            motionY=0.30000001192092896;
+        collidedHorizontally=cH;
+    } else {
+        const int belowX=int(std::floor(px)),belowY=int(std::floor(py-1.0)),belowZ=int(std::floor(pz));
+        float friction=0.91F;
+        if(onGround) friction=block_slipperiness(world.get_block(belowX,belowY,belowZ))*0.91F;
+        const float acceleration=0.16277136F/(friction*friction*friction);
+        const float moveFactor=onGround?(sprinting?0.13000001F:0.1F)*acceleration:(sprinting?0.026F:0.02F);
+        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,moveFactor,mcYaw);
+        friction=0.91F;
+        if(onGround) friction=block_slipperiness(world.get_block(belowX,belowY,belowZ))*0.91F;
+        bool cH=false,cV=false;
+        move_player_entity(world,px,py,pz,motionX,motionY,motionZ,sneaking,onGround,cH,cV,onGround);
+        if(cH) motionX=motionZ=0.0;
+        if(cV) motionY=0.0;
+        motionY-=0.08;
+        motionY*=0.9800000190734863;
+        motionX*=double(friction);
+        motionZ*=double(friction);
+        collidedHorizontally=cH;
+    }
 }
 int surface_y(const mc::world::World& world,int x,int z) {
     for(int y=mc::world::Chunk::Height-1;y>=0;--y) {
@@ -284,9 +553,15 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         blockModels[static_cast<unsigned int>(id)]=make_block_model(id,blockAtlas);
     if(ImageIsValid(blockAtlas)) UnloadImage(blockAtlas);
     float px=float(size)*0.5f,pz=float(size)*0.5f;
-    float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
-    float vx=0.0f,vz=0.0f,vy=0.0f,yaw=0.0f,pitch=-0.18f;
+    float py=float(surface_y(world,int(px),int(pz)));
+    double motionX=0.0,motionY=0.0,motionZ=0.0;
+    float yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
+    bool collidedHorizontally=false;
+    bool sprinting=false;
+    bool previousForward=false;
+    int jumpTicks=0,sprintToggleTimer=0;
+    float physicsAccumulator=0.0f;
     int selected=0;
     int creativePage=0;
     ItemStack inventory[INVENTORY_SIZE]{};
@@ -307,7 +582,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool requestQuit=false;
     float menuYaw=0.0f;
     while(!WindowShouldClose()) {
-        const float dt=std::min(GetFrameTime(),0.04f);
+        const float dt=std::min(GetFrameTime(),0.10f);
         if(inMenu) {
             menuYaw+=dt*0.055f;
             Camera3D menuCamera{};
@@ -398,7 +673,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(!paused && (IsKeyPressed(KEY_F5)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_THUMB)))) {
             thirdPerson=!thirdPerson;
         }
-        const float controlDt=(paused||inventoryOpen)?0.0f:dt;
         if(captured) {
             const Vector2 md=GetMouseDelta();
             yaw+=md.x*0.0025f;
@@ -410,65 +684,39 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch-lookY*2.0f*dt,-1.45f,1.45f);
             }
         }
-        const float forwardX=std::sin(yaw),forwardZ=-std::cos(yaw);
-        const float rightX=std::cos(yaw),rightZ=std::sin(yaw);
-        float mx=0,mz=0;
-        if(captured && IsKeyDown(KEY_W)) { mx+=forwardX; mz+=forwardZ; }
-        if(captured && IsKeyDown(KEY_S)) { mx-=forwardX; mz-=forwardZ; }
-        if(captured && IsKeyDown(KEY_D)) { mx+=rightX; mz+=rightZ; }
-        if(captured && IsKeyDown(KEY_A)) { mx-=rightX; mz-=rightZ; }
+        float moveStrafe=0.0f,moveForward=0.0f;
+        if(captured && IsKeyDown(KEY_A)) moveStrafe+=1.0f;
+        if(captured && IsKeyDown(KEY_D)) moveStrafe-=1.0f;
+        if(captured && IsKeyDown(KEY_W)) moveForward+=1.0f;
+        if(captured && IsKeyDown(KEY_S)) moveForward-=1.0f;
         if(captured && gamepad) {
             const float stickX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_X);
             const float stickY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_Y);
-            if(std::abs(stickX)>0.16f) { mx+=rightX*stickX; mz+=rightZ*stickX; }
-            if(std::abs(stickY)>0.16f) { mx-=forwardX*stickY; mz-=forwardZ*stickY; }
+            if(std::abs(stickX)>0.16f) moveStrafe-=stickX;
+            if(std::abs(stickY)>0.16f) moveForward-=stickY;
         }
-        const float len=std::sqrt(mx*mx+mz*mz);
-        if(len>0) { mx/=len; mz/=len; }
-        const bool crouching=IsKeyDown(KEY_LEFT_SHIFT);
-        const bool sprinting=!crouching && (IsKeyDown(KEY_LEFT_CONTROL) ||
+        const bool crouching=captured && IsKeyDown(KEY_LEFT_SHIFT);
+        const bool sprintKey=captured && (IsKeyDown(KEY_LEFT_CONTROL) ||
             (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB)));
-        // Java-like horizontal acceleration, air control and ground friction.
-        const float maxSpeed=crouching?1.30f:(sprinting?5.60f:4.30f);
-        const float accel=grounded?28.0f:8.0f;
-        const float friction=grounded?12.0f:1.5f;
-        const float targetVX=mx*maxSpeed,targetVZ=mz*maxSpeed;
-        if(len>0.001f) {
-            vx+=std::clamp(targetVX-vx,-accel*dt,accel*dt);
-            vz+=std::clamp(targetVZ-vz,-accel*dt,accel*dt);
-        } else {
-            const float damp=std::max(0.0f,1.0f-friction*dt);
-            vx*=damp; vz*=damp;
-        }
-        const float nextX=std::clamp(px+vx*dt,0.35f,float(size)-0.35f);
-        if(!player_collides(world,nextX,py,pz)) px=nextX;
-        else {
-            const float stepY=py+BLOCK*0.60f;
-            if(grounded && !player_collides(world,nextX,stepY,pz)) { px=nextX; py=stepY; }
-            else vx=0.0f;
-        }
-        const float nextZ=std::clamp(pz+vz*dt,0.35f,float(size)-0.35f);
-        if(!player_collides(world,px,py,nextZ)) pz=nextZ;
-        else {
-            const float stepY=py+BLOCK*0.60f;
-            if(grounded && !player_collides(world,px,stepY,nextZ)) { pz=nextZ; py=stepY; }
-            else vz=0.0f;
-        }
-        if(captured && grounded && (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) {
-            vy=10.0f; grounded=false;
-        }
-        // Gravity and vertical collision resolution use the player's full AABB.
-        vy-=32.0f*dt;
-        const float nextY=py+vy*dt;
-        if(vy<=0.0f) {
-            const float floorY=player_ground_height(world,px,pz);
-            if(nextY<=floorY) { py=floorY; vy=0.0f; grounded=true; }
-            else if(!player_collides(world,px,nextY,pz)) { py=nextY; grounded=false; }
-            else { vy=0.0f; grounded=true; }
-        } else if(!player_collides(world,px,nextY,pz)) {
-            py=nextY; grounded=false;
-        } else {
-            vy=0.0f;
+        if(crouching) { moveStrafe*=0.3f; moveForward*=0.3f; }
+        const bool jumping=captured && (IsKeyDown(KEY_SPACE) ||
+            (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)));
+        if(!paused && !inventoryOpen && !creativeOpen && captured) physicsAccumulator+=dt;
+        else { physicsAccumulator=0.0f; previousForward=false; }
+        while(physicsAccumulator>=PLAYER_TICK) {
+            if(sprintToggleTimer>0) --sprintToggleTimer;
+            const bool forwardNow=moveForward>=0.8F;
+            if(grounded && !crouching && !previousForward && forwardNow && !sprinting) {
+                if(sprintToggleTimer<=0 && !sprintKey) sprintToggleTimer=7;
+                else sprinting=true;
+            }
+            if(!sprinting && forwardNow && !crouching && sprintKey) sprinting=true;
+            if(sprinting && (!forwardNow || collidedHorizontally || crouching)) sprinting=false;
+            tick_vanilla_player(world,px,py,pz,motionX,motionY,motionZ,grounded,
+                                collidedHorizontally,jumpTicks,moveStrafe,moveForward,
+                                jumping,crouching,sprinting,yaw);
+            previousForward=forwardNow;
+            physicsAccumulator-=PLAYER_TICK;
         }
 
         if(captured) {
@@ -498,13 +746,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
 
         Camera3D camera{};
-        const float eyeHeight=crouching?2.25f:EYE_HEIGHT;
+        const float eyeHeight=crouching?1.54f:EYE_HEIGHT;
         const Vector3 lookDirection=Vector3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),-std::cos(yaw)*std::cos(pitch)};
         if(thirdPerson) {
-            camera.position=Vector3{px*BLOCK-lookDirection.x*8.0f,py+eyeHeight+lookDirection.y*2.0f-lookDirection.y*8.0f,pz*BLOCK-lookDirection.z*8.0f};
-            camera.target=Vector3{px*BLOCK,py+eyeHeight,pz*BLOCK};
+            camera.position=Vector3{px*BLOCK-lookDirection.x*8.0f,(py+eyeHeight)*BLOCK+lookDirection.y*2.0f-lookDirection.y*8.0f,pz*BLOCK-lookDirection.z*8.0f};
+            camera.target=Vector3{px*BLOCK,(py+eyeHeight)*BLOCK,pz*BLOCK};
         } else {
-            camera.position=Vector3{px*BLOCK,py+eyeHeight,pz*BLOCK};
+            camera.position=Vector3{px*BLOCK,(py+eyeHeight)*BLOCK,pz*BLOCK};
             camera.target=Vector3Add(camera.position,Vector3Scale(lookDirection,1.0f));
         }
         camera.up=Vector3{0,1,0}; camera.fovy=70; camera.projection=CAMERA_PERSPECTIVE;
@@ -524,7 +772,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             ItemStack& stack=inventory[selected];
             if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
                 const float cx=(float(bx)+0.5f)*BLOCK,cz=(float(bz)+0.5f)*BLOCK;
-                const bool overlaps=std::abs(cx-px*BLOCK)<1.0f&&std::abs(cz-pz*BLOCK)<1.0f&&float(by+1)*BLOCK>py&&float(by)*BLOCK<py+PLAYER_HEIGHT;
+                const PlayerAabb playerBounds=player_box(px,py,pz);
+                const PlayerAabb targetBounds{double(bx),double(by),double(bz),double(bx+1),double(by+1),double(bz+1)};
+                const bool overlaps=intersects(playerBounds,targetBounds);
                 if(!overlaps&&world.set_block(bx,by,bz,stack.id)) --stack.count;
             }
         }
@@ -535,7 +785,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int minX=std::max(0,int(px)-14),maxX=std::min(size,int(px)+15);
         const int minZ=std::max(0,int(pz)-14),maxZ=std::min(size,int(pz)+15);
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
-            const int minY=std::max(0,int(py/BLOCK)-18),maxY=std::min(Chunk::Height,int(py/BLOCK)+22);
+            const int minY=std::max(0,int(py)-18),maxY=std::min(Chunk::Height,int(py)+22);
             for(int y=minY;y<maxY;++y) {
                 const BlockId id=world.get_block(x,y,z);
                 if(id==BlockId::Air) continue;
@@ -620,7 +870,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("CRAFTING: recipe area is built into this inventory (recipes coming next)",panelX+18,panelY+252,14,YELLOW);
             DrawText("Hotbar: keys 1-9 | R: creative menu",panelX+18,panelY+286,14,RAYWHITE);
         }
-        DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py/BLOCK,pz),14,48,16,RAYWHITE);
+        DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
         DrawFPS(GetScreenWidth()-90,12);
         EndDrawing();
