@@ -18,6 +18,19 @@
 #include <string>
 #include <utility>
 #include <vector>
+#if defined(__SWITCH__)
+#include <sys/stat.h>
+#endif
+
+#if defined(__SWITCH__)
+#define MCC_WORLD_SAVE_PATH "sdmc:/switch/MineCppClone/world.mcc"
+#define MCC_PLAYER_SAVE_PATH "sdmc:/switch/MineCppClone/world.mcc.player"
+#define MCC_BLOCK_ATLAS_PATH "romfs:/assets/blocks_atlas_1_12.png"
+#else
+#define MCC_WORLD_SAVE_PATH "world.mcc"
+#define MCC_PLAYER_SAVE_PATH "world.mcc.player"
+#define MCC_BLOCK_ATLAS_PATH "assets/blocks_atlas_1_12.png"
+#endif
 
 namespace mc::render {
 namespace {
@@ -660,7 +673,8 @@ bool replace_saved_file(const std::string& temporary,const std::string& destinat
 bool save_world_file(const mc::world::World& world,
                      double px,double py,double pz,double motionX,double motionY,double motionZ,
                      float yaw,float pitch,const ItemStack* inventory,int selected) {
-    const std::string worldTemp="world.mcc.tmp";
+    const std::string worldPath=MCC_WORLD_SAVE_PATH;
+    const std::string worldTemp=worldPath+".tmp";
     {
         std::ofstream output(worldTemp,std::ios::binary|std::ios::trunc);
         if(!output || !world.save(output)) return false;
@@ -669,7 +683,8 @@ bool save_world_file(const mc::world::World& world,
     }
     // Save player metadata separately from the block-world payload. This is
     // our own format; no Java Anvil/NBT files are read or written.
-    const std::string playerTemp="world.mcc.player.tmp";
+    const std::string playerPath=MCC_PLAYER_SAVE_PATH;
+    const std::string playerTemp=playerPath+".tmp";
     {
         std::ofstream output(playerTemp,std::ios::trunc);
         if(!output) return false;
@@ -683,14 +698,14 @@ bool save_world_file(const mc::world::World& world,
         output.flush();
         if(!output) return false;
     }
-    if(!replace_saved_file(worldTemp,"world.mcc")) return false;
-    if(!replace_saved_file(playerTemp,"world.mcc.player")) return false;
+    if(!replace_saved_file(worldTemp,worldPath)) return false;
+    if(!replace_saved_file(playerTemp,playerPath)) return false;
     return true;
 }
 bool load_player_state(double& px,double& py,double& pz,
                        double& motionX,double& motionY,double& motionZ,
                        float& yaw,float& pitch,ItemStack* inventory,int& selected) {
-    std::ifstream input("world.mcc.player");
+    std::ifstream input(MCC_PLAYER_SAVE_PATH);
     if(!input) return false;
     std::string magic;
     int version=0;
@@ -762,7 +777,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(int cz=0;cz<chunks;++cz) for(int cx=0;cx<chunks;++cx)
         overworld.generate_chunk(world,cx,cz);
 
-    { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
+    #if defined(__SWITCH__)
+    mkdir("sdmc:/switch/MineCppClone",0777);
+#endif
+    { std::ifstream saveFile(MCC_WORLD_SAVE_PATH,std::ios::binary); if(saveFile) world.load(saveFile); }
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(120);
@@ -770,8 +788,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     Model blockModels[BLOCK_ID_COUNT]{};
     std::vector<RuntimeChunkMesh> runtimeChunkMeshes;
     runtimeChunkMeshes.reserve(96);
-    Image blockAtlas=LoadImage("assets/blocks_atlas_1_12.png");
+    Image blockAtlas=LoadImage(MCC_BLOCK_ATLAS_PATH);
+#if !defined(__SWITCH__)
     if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_atlas_1_12.png");
+#endif
     Texture2D blockTexture={0};
     if(IsImageValid(blockAtlas)) {
         blockTexture=LoadTextureFromImage(blockAtlas);
