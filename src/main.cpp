@@ -85,17 +85,19 @@ int main(int argc,char** argv) {
     }
     if(open_3d || !export_map) return mc::render::run_terrain_viewer(size,seed);
     mc::world::generation::ChunkGenerator generator(seed);
-    std::vector<int> heights(std::size_t(size)*size);
-    for(int z=0;z<size;++z) for(int x=0;x<size;++x) heights[std::size_t(z)*size+x]=generator.height_at(x,z);
     std::ofstream out(output,std::ios::binary);
     if(!out) { std::cerr<<mc::i18n::text("error.output",language)<<output<<"\n"; return 1; }
     out<<"P6\n"<<size<<" "<<size<<"\n255\n";
-    for(int h:heights) {
+    for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
+        const auto column=generator.sample(x,z);
         unsigned char rgb[3];
-        if(h<62) { rgb[0]=35; rgb[1]=75; rgb[2]=150; }
-        else if(h<66) { rgb[0]=194; rgb[1]=178; rgb[2]=128; }
-        else if(h<145) { rgb[0]=65; rgb[1]=145; rgb[2]=62; }
-        else { rgb[0]=135; rgb[1]=135; rgb[2]=140; }
+        using mc::world::generation::Biome;
+        if(column.height<62) { rgb[0]=35; rgb[1]=75; rgb[2]=150; }
+        else if(column.biome==Biome::Desert||column.biome==Biome::Savanna) { rgb[0]=210; rgb[1]=190; rgb[2]=125; }
+        else if(column.biome==Biome::Tundra||column.height>145) { rgb[0]=175; rgb[1]=180; rgb[2]=185; }
+        else if(column.biome==Biome::Swamp) { rgb[0]=65; rgb[1]=105; rgb[2]=55; }
+        else if(column.biome==Biome::Forest||column.biome==Biome::Taiga) { rgb[0]=45; rgb[1]=125; rgb[2]=58; }
+        else { rgb[0]=90; rgb[1]=165; rgb[2]=70; }
         out.write(reinterpret_cast<char*>(rgb),3);
     }
     std::string message=mc::i18n::text("terrain.generated",language);
