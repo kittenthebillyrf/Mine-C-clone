@@ -103,7 +103,22 @@ const BlockInfo& block_info(BlockId id) {
         {BlockId::RedConcrete,"red_concrete",true},
         {BlockId::BlackConcrete,"black_concrete",true},
         {BlockId::Torch,"torch",false},
-        {BlockId::OakStairs,"oak_stairs",true}
+        {BlockId::OakStairs,"oak_stairs",true},
+        {BlockId::SpruceSlab,"spruce_slab",true},
+        {BlockId::BirchSlab,"birch_slab",true},
+        {BlockId::JungleSlab,"jungle_slab",true},
+        {BlockId::AcaciaSlab,"acacia_slab",true},
+        {BlockId::DarkOakSlab,"dark_oak_slab",true},
+        {BlockId::SpruceFence,"spruce_fence",true},
+        {BlockId::BirchFence,"birch_fence",true},
+        {BlockId::JungleFence,"jungle_fence",true},
+        {BlockId::AcaciaFence,"acacia_fence",true},
+        {BlockId::DarkOakFence,"dark_oak_fence",true},
+        {BlockId::SpruceStairs,"spruce_stairs",true},
+        {BlockId::BirchStairs,"birch_stairs",true},
+        {BlockId::JungleStairs,"jungle_stairs",true},
+        {BlockId::AcaciaStairs,"acacia_stairs",true},
+        {BlockId::DarkOakStairs,"dark_oak_stairs",true}
     }};
     const auto raw=static_cast<std::uint16_t>(id);
     return blocks[raw<blocks.size()?raw:0];
