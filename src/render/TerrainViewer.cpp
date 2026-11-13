@@ -168,7 +168,7 @@ int texture_slot(mc::world::BlockId id) {
 }
 Model make_block_model(mc::world::BlockId id,const Image& atlas) {
     const int slot=texture_slot(id);
-    if(slot<0 || !ImageIsValid(atlas)) return Model{};
+    if(slot<0 || !IsImageValid(atlas)) return Model{};
     const Rectangle crop{float((slot%4)*16),float((slot/4)*16),16.0f,16.0f};
     Image image=ImageFromImage(atlas,crop);
     Texture2D texture=LoadTextureFromImage(image);
@@ -307,31 +307,25 @@ bool move_player_entity(const mc::world::World& world,double& px,double& py,doub
                         bool& collidedHorizontally,bool& collidedVertically,bool& onGround) {
     PlayerAabb box=player_box(px,py,pz);
     double requestedX=dx,requestedY=dy,requestedZ=dz;
-    double stepX=dx,stepZ=dz;
     if(sneaking && wasOnGround) {
         while(dx!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,0.0)).empty()) {
             if(dx>-0.05 && dx<0.05) dx=0.0;
             else if(dx>0.0) dx-=0.05;
             else dx+=0.05;
         }
-        stepX=dx;
         while(dz!=0.0 && collision_boxes(world,box.offset(0.0,-PLAYER_STEP_HEIGHT,dz)).empty()) {
             if(dz>-0.05 && dz<0.05) dz=0.0;
             else if(dz>0.0) dz-=0.05;
             else dz+=0.05;
         }
-        stepZ=dz;
         while(dx!=0.0 && dz!=0.0 && collision_boxes(world,box.offset(dx,-PLAYER_STEP_HEIGHT,dz)).empty()) {
             if(dx>-0.05 && dx<0.05) dx=0.0;
             else if(dx>0.0) dx-=0.05;
             else dx+=0.05;
-            stepX=dx;
             if(dz>-0.05 && dz<0.05) dz=0.0;
             else if(dz>0.0) dz-=0.05;
             else dz+=0.05;
-            stepZ=dz;
         }
-        stepX=dx; stepZ=dz;
     }
     const double originalY=dy;
     const double originalStepX=dx,originalStepZ=dz;
@@ -443,7 +437,6 @@ void tick_vanilla_player(const mc::world::World& world,double& px,double& py,dou
     if(water) {
         const double oldY=py;
         move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYaw);
-        const double requestedX=motionX,requestedY=motionY,requestedZ=motionZ;
         bool cH=false,cV=false;
         move_player_entity(world,px,py,pz,motionX,motionY,motionZ,sneaking,onGround,cH,cV,onGround);
         if(cH) motionX=motionZ=0.0;
@@ -453,7 +446,6 @@ void tick_vanilla_player(const mc::world::World& world,double& px,double& py,dou
         if(cH && offset_position_is_liquid(world,motionX,motionY+0.6000000238418579-py+oldY,motionZ,player_box(px,py,pz)))
             motionY=0.30000001192092896;
         collidedHorizontally=cH;
-        (void)requestedX; (void)requestedY; (void)requestedZ;
     } else if(lava) {
         const double oldY=py;
         move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYaw);
@@ -542,7 +534,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
     Image blockAtlas=LoadImage("assets/blocks_core_1_12.png");
-    if(!ImageIsValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_core_1_12.png");
+    if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_core_1_12.png");
     const BlockId texturedBlocks[16]={
         BlockId::Stone,BlockId::Dirt,BlockId::Grass,BlockId::Sand,
         BlockId::Bedrock,BlockId::Cobblestone,BlockId::OakPlanks,BlockId::OakLog,
@@ -551,7 +543,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     };
     for(const BlockId id:texturedBlocks)
         blockModels[static_cast<unsigned int>(id)]=make_block_model(id,blockAtlas);
-    if(ImageIsValid(blockAtlas)) UnloadImage(blockAtlas);
+    if(IsImageValid(blockAtlas)) UnloadImage(blockAtlas);
     float px=float(size)*0.5f,pz=float(size)*0.5f;
     float py=float(surface_y(world,int(px),int(pz)));
     double motionX=0.0,motionY=0.0,motionZ=0.0;
