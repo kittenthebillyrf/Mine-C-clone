@@ -334,7 +334,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(std::abs(candidate.x-centerX)<=KEEP_CHUNK_RADIUS &&
                std::abs(candidate.z-centerZ)<=KEEP_CHUNK_RADIUS) {
                 residentOrder.push_back(candidate);
-                if(residentOrder.size()<=MAX_RESIDENT_CHUNKS) break;
+                if(residentOrder.size()<=deviceProfile.maxResidentChunks) break;
                 continue;
             }
             if(world.find_chunk(candidate.x,candidate.z)) {
