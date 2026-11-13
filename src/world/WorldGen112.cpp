@@ -300,8 +300,8 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
             x+=std::cos(angle); z+=std::sin(angle); y+=pitch;
             angle+=(cave_random.next_double()-0.5)*0.22;
             pitch=(pitch+(cave_random.next_double()-0.5)*0.08)*0.8;
-            for(int bx=int(x-radius);bx<=int(x+radius);++bx)
-                for(int bz=int(z-radius);bz<=int(z+radius);++bz)
+            for(int bx=std::max(ox,int(x-radius));bx<=std::min(ox+15,int(x+radius));++bx)
+                for(int bz=std::max(oz,int(z-radius));bz<=std::min(oz+15,int(z+radius));++bz)
                     for(int by=std::max(5,int(y-radius));by<=std::min(120,int(y+radius));++by) {
                         const double dx=(bx+0.5-x)/radius,dz=(bz+0.5-z)/radius,dy=(by+0.5-y)/radius;
                         if(dx*dx+dy*dy+dz*dz<1.0) {

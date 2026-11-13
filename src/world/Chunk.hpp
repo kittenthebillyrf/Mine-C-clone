@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 namespace mc::world {
 struct BlockState {
@@ -27,10 +28,12 @@ public:
     std::uint64_t revision() const { return revision_; }
     std::size_t state_count() const { return states_.size(); }
     const std::unordered_map<std::size_t,BlockState>& state_entries() const { return states_; }
+    const std::vector<std::size_t>& falling_blocks() const { return falling_blocks_; }
 private:
     static std::size_t index(int x,int y,int z);
     std::array<BlockId,Volume> blocks_{};
     std::unordered_map<std::size_t,BlockState> states_;
+    std::vector<std::size_t> falling_blocks_;
     std::uint64_t revision_=0;
 };
 }

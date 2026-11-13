@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <iosfwd>
 #include <unordered_map>
+#include <vector>
 
 namespace mc::world {
 struct ChunkPos { int x{}; int z{}; bool operator==(const ChunkPos&) const = default; };
@@ -12,6 +13,10 @@ class World {
 public:
     Chunk& get_or_create_chunk(int chunk_x,int chunk_z);
     const Chunk* find_chunk(int chunk_x,int chunk_z) const;
+    bool erase_chunk(int chunk_x,int chunk_z);
+    std::vector<ChunkPos> chunk_positions() const;
+    bool save_chunk(std::ostream& output,int chunk_x,int chunk_z) const;
+    bool load_chunk(std::istream& input,int chunk_x,int chunk_z);
     BlockId get_block(int world_x,int y,int world_z) const;
     bool set_block(int world_x,int y,int world_z,BlockId block);
     bool set_block_state(int world_x,int y,int world_z,const BlockState& state);

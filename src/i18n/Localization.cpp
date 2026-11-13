@@ -30,7 +30,7 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
             {"settings.chunks", "chunks"},
             {"settings.per_frame", "per frame"},
             {"help.usage", "Options: --size N --seed N --output FILE --lang CODE --help"},
-            {"help.languages", "Languages: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français), zh_CN (简体中文)"},
+            {"help.languages", "Languages: en (English), ru (Русский), es (Español), de (Deutsch), fr (Français)"},
             {"error.output", "Error: cannot write output file: "},
             {"terrain.generated", "Generated {size}x{size} terrain, seed {seed} -> {output}"},
             {"language.unknown", "Unknown language '{code}', using English."}
@@ -139,32 +139,6 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
             {"terrain.generated", "Terrain {size}x{size} généré, graine {seed} -> {output}"},
             {"language.unknown", "Langue inconnue « {code} », anglais utilisé."}
         }},
-        {"zh_CN", {
-            {"app.title", "Mine C++ Clone - 地形生成原型"},
-            {"menu.singleplayer", "单人游戏"},
-            {"menu.multiplayer", "多人游戏"},
-            {"menu.options", "选项"},
-            {"menu.quit", "退出游戏"},
-            {"menu.back", "返回"},
-            {"pause.continue", "继续游戏"},
-            {"pause.settings", "设置"},
-            {"pause.save", "保存世界"},
-            {"pause.save_return", "保存并返回标题"},
-            {"settings.title", "设置"},
-            {"settings.language", "语言"},
-            {"settings.render_distance", "渲染距离"},
-            {"settings.chunk_updates", "每帧区块重建数"},
-            {"settings.fov", "视野"},
-            {"settings.sensitivity", "鼠标灵敏度"},
-            {"settings.instructions", "左右：更改   上下：选择   B/Esc：返回"},
-            {"settings.chunks", "区块"},
-            {"settings.per_frame", "每帧"},
-            {"help.usage", "选项：--size N --seed N --output 文件 --lang 语言代码 --help"},
-            {"help.languages", "语言：en (English), ru (Русский), es (Español), de (Deutsch), fr (Français), zh_CN (简体中文)"},
-            {"error.output", "错误：无法写入输出文件："},
-            {"terrain.generated", "已生成 {size}x{size} 地形，种子 {seed} -> {output}"},
-            {"language.unknown", "未知语言“{code}”，将使用英语。"}
-        }}
     };
     return data;
 }
@@ -172,7 +146,7 @@ const std::unordered_map<std::string, Catalog>& catalogs() {
 const std::vector<Language>& languages() {
     static const std::vector<Language> list{
         {"en", "English"}, {"ru", "Русский"}, {"es", "Español"},
-        {"de", "Deutsch"}, {"fr", "Français"}, {"zh_CN", "简体中文"}
+        {"de", "Deutsch"}, {"fr", "Français"}
     };
     return list;
 }

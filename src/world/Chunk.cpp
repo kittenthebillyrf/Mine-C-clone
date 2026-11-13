@@ -14,6 +14,13 @@ bool Chunk::set(int x,int y,int z,BlockId block) {
     if(x<0||x>=Width||y<0||y>=Height||z<0||z>=Depth) return false;
     const auto i=index(x,y,z);
     if(blocks_[i]!=block) {
+        const BlockId previous=blocks_[i];
+        const bool wasFalling=previous==BlockId::Sand||previous==BlockId::Gravel;
+        const bool isFalling=block==BlockId::Sand||block==BlockId::Gravel;
+        if(wasFalling&&!isFalling)
+            falling_blocks_.erase(std::remove(falling_blocks_.begin(),falling_blocks_.end(),i),falling_blocks_.end());
+        else if(!wasFalling&&isFalling)
+            falling_blocks_.push_back(i);
         blocks_[i]=block;
         if(block==BlockId::Air) states_.erase(i);
         ++revision_;

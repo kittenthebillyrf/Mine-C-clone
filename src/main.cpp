@@ -245,12 +245,12 @@ bool run_chunk_mesh_self_test() {
 }
 }
 int main(int argc,char** argv) {
-    int size=128; std::uint32_t seed=1122;
+    int size=4096; std::uint32_t seed=1122;
     std::string output="terrain.ppm", language="en";
     bool self_test=false, open_3d=false, export_map=false;
     for(int i=1;i<argc;++i) {
         const std::string a=argv[i];
-        if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,2048);
+        if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,4096);
         else if(a=="--seed" && i+1<argc) seed=std::uint32_t(std::strtoul(argv[++i],nullptr,10));
         else if(a=="--output" && i+1<argc) output=argv[++i];
         else if(a=="--lang" && i+1<argc) language=argv[++i];
