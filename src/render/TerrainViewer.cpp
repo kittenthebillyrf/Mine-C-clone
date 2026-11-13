@@ -156,15 +156,38 @@ int texture_slot(mc::world::BlockId id) {
     const int slot=static_cast<int>(id);
     return (slot>0 && slot<static_cast<int>(mc::world::BLOCK_ID_COUNT))?slot:-1;
 }
+int face_texture_slot(mc::world::BlockId id,Vector3 normal) {
+    using mc::world::BlockId;
+    const bool top=normal.y>0.5f, bottom=normal.y<-0.5f;
+    switch(id) {
+        case BlockId::Grass: return top?3:(bottom?2:98);
+        case BlockId::OakLog: return (top||bottom)?99:9;
+        case BlockId::Sandstone: return top?12:(bottom?101:100);
+        case BlockId::Cactus: return top?102:(bottom?103:26);
+        case BlockId::CraftingTable: return top?33:(bottom?8:(normal.z>0.5f?105:104));
+        case BlockId::Furnace: return top?106:(normal.z>0.5f?107:34);
+        case BlockId::Pumpkin: return (top||bottom)?108:32;
+        case BlockId::PumpkinLit: return (top||bottom)?108:80;
+        case BlockId::Melon: return (top||bottom)?109:79;
+        case BlockId::HayBale: return (top||bottom)?110:78;
+        default: return texture_slot(id);
+    }
+}
 Model make_block_model(mc::world::BlockId id,const Image& atlas) {
-    const int slot=texture_slot(id);
-    if(slot<0 || !IsImageValid(atlas)) return Model{};
-    const Rectangle crop{float((slot%16)*16),float((slot/16)*16),16.0f,16.0f};
-    Image image=ImageFromImage(atlas,crop);
-    Texture2D texture=LoadTextureFromImage(image);
-    UnloadImage(image);
+    if(texture_slot(id)<0 || !IsImageValid(atlas)) return Model{};
+    Mesh mesh=GenMeshCube(BLOCK,BLOCK,BLOCK);
+    for(int vertex=0;vertex<mesh.vertexCount;++vertex) {
+        const Vector3 normal={mesh.normals[vertex*3],mesh.normals[vertex*3+1],mesh.normals[vertex*3+2]};
+        const int slot=face_texture_slot(id,normal);
+        if(slot<0) continue;
+        const float oldU=mesh.texcoords[vertex*2],oldV=mesh.texcoords[vertex*2+1];
+        const float col=float(slot%16),row=float(slot/16);
+        mesh.texcoords[vertex*2]=(col+oldU)/16.0f;
+        mesh.texcoords[vertex*2+1]=(row+oldV)/8.0f;
+    }
+    Model model=LoadModelFromMesh(mesh);
+    Texture2D texture=LoadTextureFromImage(atlas);
     if(texture.id!=0) SetTextureFilter(texture,TEXTURE_FILTER_POINT);
-    Model model=LoadModelFromMesh(GenMeshCube(BLOCK,BLOCK,BLOCK));
     if(model.materialCount>0 && texture.id!=0)
         model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
     return model;

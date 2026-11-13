@@ -393,5 +393,25 @@
       "texture": "concrete_black.png"
     }
   },
-  "source_texture_count": 478
+  "source_texture_count": 478,
+  "rows": 8,
+  "atlas_size": [
+    256,
+    128
+  ],
+  "face_variants": {
+    "98": "grass_side",
+    "99": "log_oak_top",
+    "100": "sandstone_side",
+    "101": "sandstone_bottom",
+    "102": "cactus_top",
+    "103": "cactus_bottom",
+    "104": "crafting_table_side",
+    "105": "crafting_table_front",
+    "106": "furnace_top",
+    "107": "furnace_front_off",
+    "108": "pumpkin_top",
+    "109": "melon_top",
+    "110": "hay_block_top"
+  }
 }
