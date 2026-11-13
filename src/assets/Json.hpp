@@ -18,12 +18,13 @@ struct Value {
     bool is_string() const { return std::holds_alternative<std::string>(data); }
     bool is_number() const { return std::holds_alternative<double>(data); }
     bool is_bool() const { return std::holds_alternative<bool>(data); }
-    const Value* get(const std::string& k) const { if(!is_object()) return nullptr; const auto& o=std::get<Object>(data); auto i=o.find(k); return i==o.end()?nullptr:&i->second; }
-    const Value* at(std::size_t i) const { if(!is_array()) return nullptr; const auto& a=std::get<Array>(data); return i<a.size()?&a[i]:nullptr; }
+    const Object* object() const { return is_object()?&std::get<Object>(data):nullptr; }
+    const Array* array() const { return is_array()?&std::get<Array>(data):nullptr; }
+    const Value* get(const std::string& k) const { const auto* o=object(); if(!o)return nullptr; auto i=o->find(k); return i==o->end()?nullptr:&i->second; }
+    const Value* at(std::size_t i) const { const auto* a=array(); return a&&i<a->size()?&(*a)[i]:nullptr; }
     const std::string* string() const { return is_string()?&std::get<std::string>(data):nullptr; }
     const double* number() const { return is_number()?&std::get<double>(data):nullptr; }
     const bool* boolean() const { return is_bool()?&std::get<bool>(data):nullptr; }
-    const Array* array() const { return is_array()?&std::get<Array>(data):nullptr; }
 };
 struct ParseResult { Value value; std::size_t error_offset=0; std::string error; explicit operator bool() const { return error.empty(); } };
 class Parser {
@@ -56,12 +57,14 @@ class Parser {
         auto t=s.substr(b,p-b);char* end=nullptr;double n=std::strtod(t.c_str(),&end);if(end!=t.c_str()+t.size()||!std::isfinite(n))return bad("number out of range");v.data=n;return true;
     }
     bool value(Value& v,unsigned d){
-        if(d>128)return bad("maximum nesting exceeded");ws();if(p==s.size())return bad("unexpected end");char c=s[p];
+        if(d>128)return bad("maximum nesting exceeded");
+        ws();if(p==s.size())return bad("unexpected end");char c=s[p];
         if(c=='"'){std::string x;if(!str(x))return false;v.data=std::move(x);return true;}
         if(c=='{'){++p;Value::Object o;ws();if(take('}')){v.data=std::move(o);return true;}for(;;){ws();std::string k;if(!str(k))return false;ws();if(!take(':'))return bad("expected colon");Value x;if(!value(x,d+1))return false;if(!o.emplace(std::move(k),std::move(x)).second)return bad("duplicate key");ws();if(take('}'))break;if(!take(','))return bad("expected comma");}v.data=std::move(o);return true;}
         if(c=='['){++p;Value::Array a;ws();if(take(']')){v.data=std::move(a);return true;}for(;;){Value x;if(!value(x,d+1))return false;a.push_back(std::move(x));ws();if(take(']'))break;if(!take(','))return bad("expected comma");}v.data=std::move(a);return true;}
         if(s.compare(p,4,"true")==0){p+=4;v.data=true;return true;}if(s.compare(p,5,"false")==0){p+=5;v.data=false;return true;}if(s.compare(p,4,"null")==0){p+=4;v.data=nullptr;return true;}
-        if(c=='-'||(c>='0'&&c<='9'))return number(v);return bad("unexpected token");
+        if(c=='-'||(c>='0'&&c<='9'))return number(v);
+        return bad("unexpected token");
     }
 public:
     explicit Parser(const std::string& source):s(source){}
