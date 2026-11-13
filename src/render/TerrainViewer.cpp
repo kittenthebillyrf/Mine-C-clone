@@ -31,12 +31,14 @@
 #define MCC_BLOCK_ATLAS_PATH "romfs:/assets/blocks_atlas_1_12.png"
 #define MCC_UI_FONT_PATH "romfs:/assets/dejavu.fnt"
 #define MCC_OPTIONS_SAVE_PATH "sdmc:/switch/MineCppClone/options.cfg"
+#define MCC_CHUNK_SAVE_PREFIX "sdmc:/switch/MineCppClone/chunk_"
 #else
 #define MCC_WORLD_SAVE_PATH "world.mcc"
 #define MCC_PLAYER_SAVE_PATH "world.mcc.player"
 #define MCC_BLOCK_ATLAS_PATH "assets/blocks_atlas_1_12.png"
 #define MCC_UI_FONT_PATH "assets/dejavu.fnt"
 #define MCC_OPTIONS_SAVE_PATH "options.cfg"
+#define MCC_CHUNK_SAVE_PREFIX "world_chunk_"
 #endif
 
 namespace mc::render {
@@ -683,6 +685,41 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
+std::string chunk_file_path(int cx,int cz) {
+    return std::string(MCC_CHUNK_SAVE_PREFIX)+std::to_string(cx)+"_"+std::to_string(cz)+".mccchunk";
+}
+bool load_chunk_sidecar(mc::world::World& world,int cx,int cz) {
+    const std::string path=chunk_file_path(cx,cz);
+    std::ifstream input(path,std::ios::binary);
+    if(!input) return false;
+    if(world.load_chunk(input,cx,cz)) return true;
+    input.close(); std::remove(path.c_str());
+    return false;
+}
+bool generate_or_load_chunk(mc::world::World& world,const mc::world::OverworldGenerator112& generator,
+                            int cx,int cz,int chunksWide) {
+    if(cx<0||cz<0||cx>=chunksWide||cz>=chunksWide) return false;
+    if(load_chunk_sidecar(world,cx,cz)) return true;
+    if(world.find_chunk(cx,cz)) return true;
+    generator.generate_chunk(world,cx,cz);
+    return world.find_chunk(cx,cz)!=nullptr;
+}
+bool unload_chunk_to_sidecar(mc::world::World& world,int cx,int cz) {
+    const std::string path=chunk_file_path(cx,cz),temporary=path+".tmp";
+    {
+        std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
+        if(!output||!world.save_chunk(output,cx,cz)) {
+            output.close(); std::remove(temporary.c_str()); return false;
+        }
+        output.flush();
+        if(!output) { output.close(); std::remove(temporary.c_str()); return false; }
+    }
+    if(std::rename(temporary.c_str(),path.c_str())!=0) {
+        std::remove(temporary.c_str()); return false;
+    }
+    world.erase_chunk(cx,cz);
+    return true;
+}
 bool replace_saved_file(const std::string& temporary,const std::string& destination) {
     const std::string backup=destination+".bak";
     std::remove(backup.c_str());
@@ -787,7 +824,7 @@ void draw_settings_panel(Font font,int selected,int languageIndex,int renderDist
                  Vector2{float(panelX+24),float(panelY+274)},15,LIGHTGRAY);
 }
 
-bool save_world_file(const mc::world::World& world,
+bool save_world_file(mc::world::World& world,
                      double px,double py,double pz,double motionX,double motionY,double motionZ,
                      float yaw,float pitch,const ItemStack* inventory,int selected) {
     const std::string worldPath=MCC_WORLD_SAVE_PATH;
@@ -817,6 +854,7 @@ bool save_world_file(const mc::world::World& world,
     }
     if(!replace_saved_file(worldTemp,worldPath)) return false;
     if(!replace_saved_file(playerTemp,playerPath)) return false;
+    for(const auto& pos:world.chunk_positions()) std::remove(chunk_file_path(pos.x,pos.z).c_str());
     return true;
 }
 bool load_player_state(double& px,double& py,double& pz,
@@ -887,17 +925,15 @@ bool ray_block(Ray ray,mc::world::World& world,Vector3& hit,Vector3& previous) {
 }
 int run_terrain_viewer(int map_size,std::uint32_t seed) {
     using namespace mc::world;
-    const int size=std::clamp(map_size,32,96);
+    const int size=std::clamp(map_size,32,4096);
     World world;
     OverworldGenerator112 overworld(static_cast<std::int64_t>(seed));
-    const int chunks=(size+15)/16;
-    for(int cz=0;cz<chunks;++cz) for(int cx=0;cx<chunks;++cx)
-        overworld.generate_chunk(world,cx,cz);
+    const int chunksWide=(size+15)/16;
 
     #if defined(__SWITCH__)
     mkdir("sdmc:/switch/MineCppClone",0777);
 #endif
-    int languageIndex=1; // Russian is the first-run default; all six supported languages remain selectable.
+    int languageIndex=1; // Russian is the first-run default; five supported languages remain selectable.
     int renderDistanceChunks=6;
     int chunkBuildsPerFrame=4;
     float mouseSensitivity=0.0025f;
@@ -905,6 +941,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     load_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
     std::string languageCode(mc::i18n::languages()[std::size_t(languageIndex)].code);
     { std::ifstream saveFile(MCC_WORLD_SAVE_PATH,std::ios::binary); if(saveFile) world.load(saveFile); }
+    for(const auto& pos:world.chunk_positions()) load_chunk_sidecar(world,pos.x,pos.z);
+    const int centerX=size/2,centerZ=size/2;
+    const int centerChunkX=centerX/Chunk::Width,centerChunkZ=centerZ/Chunk::Depth;
+    for(int dz=-1;dz<=1;++dz) for(int dx=-1;dx<=1;++dx)
+        generate_or_load_chunk(world,overworld,centerChunkX+dx,centerChunkZ+dz,chunksWide);
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
     SetTargetFPS(60);
@@ -916,7 +957,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     DisableCursor();
     Model blockModels[BLOCK_ID_COUNT]{};
     std::vector<RuntimeChunkMesh> runtimeChunkMeshes;
-    runtimeChunkMeshes.reserve(96);
+    runtimeChunkMeshes.reserve(256);
 #if defined(__SWITCH__)
     // NROs do not expose romfs paths until the filesystem is mounted.
     romfsInit();
@@ -938,8 +979,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         UnloadImage(blockAtlas);
     }
-    double px=double(size)*0.5,pz=double(size)*0.5;
-    double py=double(surface_y(world,int(px),int(pz)));
+    double px=double(centerX)+0.5,pz=double(centerZ)+0.5;
+    double py=double(surface_y(world,centerX,centerZ));
     double motionX=0.0,motionY=0.0,motionZ=0.0;
     float yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
@@ -961,20 +1002,35 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(int i=0;i<HOTBAR_SIZE;++i) inventory[i]={startingItems[i],32};
     // Restore the complete local player session when a matching custom save
     // exists. Missing/invalid metadata leaves a fresh spawn and starter bar.
-    const bool playerLoaded=load_player_state(px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
+    bool playerLoaded=load_player_state(px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
+    if(playerLoaded && (px<0.31||pz<0.31||px>double(size)-0.31||pz>double(size)-0.31))
+        playerLoaded=false;
+    if(!playerLoaded) {
+        px=double(centerX)+0.5; pz=double(centerZ)+0.5;
+        py=double(surface_y(world,centerX,centerZ));
+        motionX=motionY=motionZ=0.0;
+    } else {
+        const int playerChunkX=int(std::floor(px))/Chunk::Width;
+        const int playerChunkZ=int(std::floor(pz))/Chunk::Depth;
+        for(int dz=-1;dz<=1;++dz) for(int dx=-1;dx<=1;++dx)
+            generate_or_load_chunk(world,overworld,playerChunkX+dx,playerChunkZ+dz,chunksWide);
+    }
     // New games (and old saves that resume underwater) choose the nearest dry,
     // walkable surface instead of placing the player on the ocean floor.
     if(!playerLoaded || in_water(world,px,py,pz)) {
         double bestDistance=std::numeric_limits<double>::max();
         bool foundDrySpawn=false;
-        const double center=(double(size)-1.0)*0.5;
-        for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
+        const int spawnCenterX=std::clamp(int(std::floor(px)),1,size-2);
+        const int spawnCenterZ=std::clamp(int(std::floor(pz)),1,size-2);
+        const double centerXForSpawn=double(spawnCenterX),centerZForSpawn=double(spawnCenterZ);
+        for(int z=std::max(1,spawnCenterZ-12);z<=std::min(size-2,spawnCenterZ+12);++z)
+            for(int x=std::max(1,spawnCenterX-12);x<=std::min(size-2,spawnCenterX+12);++x) {
             const int top=surface_y(world,x,z);
             if(top<63 || top+1>=Chunk::Height) continue;
             const BlockId floor=world.get_block(x,top-1,z);
             if(floor==BlockId::Air || floor==BlockId::Water || floor==BlockId::Lava) continue;
             if(world.get_block(x,top,z)!=BlockId::Air || world.get_block(x,top+1,z)!=BlockId::Air) continue;
-            const double dx=double(x)-center,dz=double(z)-center;
+            const double dx=double(x)-centerXForSpawn,dz=double(z)-centerZForSpawn;
             const double distance=dx*dx+dz*dz;
             if(distance<bestDistance) {
                 bestDistance=distance; px=double(x)+0.5; pz=double(z)+0.5;
@@ -993,8 +1049,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
         }
         if(!recovered) {
-            px=double(size)*0.5; pz=double(size)*0.5;
-            py=double(surface_y(world,int(px),int(pz)));
+            px=double(centerX)+0.5; pz=double(centerZ)+0.5;
+            py=double(surface_y(world,centerX,centerZ));
             motionX=motionY=motionZ=0.0;
         }
     }
@@ -1030,6 +1086,25 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         switchMenuBack=(switchKeysDown&HidNpadButton_B)!=0;
 #endif
         const float dt=std::min(GetFrameTime(),0.10f);
+        // Stream nearby 16x16 chunks; the full 4096x4096 map is never
+        // allocated in RAM. Distant chunks are paged to disk sidecars.
+        const int playerChunkX=std::clamp(int(std::floor(px))/Chunk::Width,0,chunksWide-1);
+        const int playerChunkZ=std::clamp(int(std::floor(pz))/Chunk::Depth,0,chunksWide-1);
+        const int activeChunkRadius=std::clamp(renderDistanceChunks+1,3,17);
+        int generatedChunksThisFrame=0;
+        for(int ring=0;ring<=activeChunkRadius && generatedChunksThisFrame<2;++ring) {
+            for(int dz=-ring;dz<=ring && generatedChunksThisFrame<2;++dz)
+                for(int dx=-ring;dx<=ring && generatedChunksThisFrame<2;++dx) {
+                    if(std::max(std::abs(dx),std::abs(dz))!=ring) continue;
+                    const int cx=playerChunkX+dx,cz=playerChunkZ+dz;
+                    if(cx<0||cz<0||cx>=chunksWide||cz>=chunksWide||world.find_chunk(cx,cz)) continue;
+                    if(generate_or_load_chunk(world,overworld,cx,cz,chunksWide)) ++generatedChunksThisFrame;
+                }
+        }
+        const int unloadRadius=activeChunkRadius+1;
+        for(const auto& pos:world.chunk_positions())
+            if(std::abs(pos.x-playerChunkX)>unloadRadius||std::abs(pos.z-playerChunkZ)>unloadRadius)
+                unload_chunk_to_sidecar(world,pos.x,pos.z);
         if(inMenu) {
             menuYaw+=dt*0.055f;
             Camera3D menuCamera{};
@@ -1282,6 +1357,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             tick_vanilla_player(world,px,py,pz,motionX,motionY,motionZ,grounded,
                                 collidedHorizontally,jumpTicks,moveStrafe,moveForward,
                                 jumping,crouching,sprinting,yaw);
+            const double boundedX=std::clamp(px,0.31,double(size)-0.31);
+            const double boundedZ=std::clamp(pz,0.31,double(size)-0.31);
+            if(boundedX!=px) motionX=0.0;
+            if(boundedZ!=pz) motionZ=0.0;
+            px=boundedX; pz=boundedZ;
             previousForward=forwardNow;
             physicsAccumulator-=PLAYER_TICK;
             fallingBlockAccumulator+=PLAYER_TICK;
@@ -1350,7 +1430,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||switchZRPressed)) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
             const BlockId broken=world.get_block(bx,by,bz);
-            if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
+            if(bx>=0&&bz>=0&&bx<size&&bz<size&&broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
                 // Never delete a block if its drop cannot fit in the inventory.
                 if(creativeMode || add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
@@ -1358,7 +1438,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||switchZLPressed)) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
             ItemStack& stack=inventory[selected];
-            if(by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
+            if(bx>=0&&bz>=0&&bx<size&&bz<size&&by>=1&&by<Chunk::Height&&stack.count>0&&stack.id!=BlockId::Air) {
                 const PlayerAabb playerBounds=player_box(px,py,pz);
                 const PlayerAabb targetBounds{double(bx),double(by),double(bz),double(bx+1),double(by+1),double(bz+1)};
                 const bool overlaps=intersects(playerBounds,targetBounds);
