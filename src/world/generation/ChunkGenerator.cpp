@@ -45,7 +45,7 @@ double fbm(double x,double z,std::uint64_t seed,int octaves,double frequency,dou
     }
     return norm>0?sum/norm:0;
 }
-bool is_tree_biome(Biome b) noexcept { return b==Biome::Forest||b==Biome::Taiga||b==Biome::Savanna; }
+bool is_tree_biome(Biome b) noexcept { return b==Biome::Forest||b==Biome::Taiga||b==Biome::Savanna||b==Biome::Rainforest||b==Biome::SeasonalForest; }
 }
 ColumnSample ChunkGenerator::sample(int x,int z) const noexcept {
     const double continental=fbm(x,z,seed_^0x434f4e54494e454eULL,5,0.0018,0.55);
@@ -59,12 +59,16 @@ ColumnSample ChunkGenerator::sample(int x,int z) const noexcept {
     if(riverField>0.91) elevation-=std::min(18.0,(riverField-0.91)*220.0);
     elevation=std::clamp(elevation,5.0,205.0);
     Biome biome=Biome::Plains;
-    if(temperature<0.20) biome=Biome::Tundra;
+    if(temperature<0.16&&rainfall<0.24) biome=Biome::IceDesert;
+    else if(temperature<0.20) biome=Biome::Tundra;
     else if(temperature<0.34) biome=Biome::Taiga;
     else if(temperature>0.78&&rainfall<0.22) biome=Biome::Desert;
+    else if(temperature>0.78&&rainfall>0.68) biome=Biome::Rainforest;
     else if(temperature>0.72&&rainfall<0.42) biome=Biome::Savanna;
-    else if(rainfall>0.78&&elevation<76) biome=Biome::Swamp;
+    else if(rainfall>0.80&&elevation<76) biome=Biome::Swamp;
+    else if(rainfall>0.72&&temperature>0.45) biome=Biome::SeasonalForest;
     else if(rainfall>0.52) biome=Biome::Forest;
+    else if(rainfall<0.30) biome=Biome::Shrubland;
     return {int(std::lround(elevation)),biome,float(temperature),float(rainfall)};
 }
 void ChunkGenerator::generate_chunk(World& world,int cx,int cz) const {
@@ -76,7 +80,7 @@ void ChunkGenerator::generate_chunk(World& world,int cx,int cz) const {
 
     for(int x=0;x<Chunk::Width;++x) for(int z=0;z<Chunk::Depth;++z) {
         const auto c=columns[x][z];
-        const bool sandy=c.biome==Biome::Desert||c.biome==Biome::Savanna||
+        const bool sandy=c.biome==Biome::Desert||c.biome==Biome::IceDesert||c.biome==Biome::Savanna||
                          (c.height<=sea+1&&c.temperature>0.48f);
         const bool gravelPatch=unit(hash3(ox+x,0,oz+z,seed_^0x47524156454c2121ULL))>0.965;
         for(int y=0;y<=c.height;++y) {
