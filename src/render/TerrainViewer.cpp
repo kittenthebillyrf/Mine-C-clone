@@ -703,7 +703,7 @@ void save_options_file(int languageIndex,int renderDistanceChunks,int chunkBuild
     if(languageIndex<0 || languageIndex>=int(available.size())) languageIndex=0;
     std::ofstream output(MCC_OPTIONS_SAVE_PATH,std::ios::trunc);
     if(!output) return;
-    output << "MCCOPTIONS 1\\n" << available[std::size_t(languageIndex)].code << '\\n'
+    output << "MCCOPTIONS 1\n" << available[std::size_t(languageIndex)].code << '\n'
            << renderDistanceChunks << ' ' << chunkBuildsPerFrame << ' '
            << fieldOfView << ' ' << mouseSensitivity << '\\n';
 }
@@ -897,6 +897,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     #if defined(__SWITCH__)
     mkdir("sdmc:/switch/MineCppClone",0777);
 #endif
+    int languageIndex=1; // Russian is the first-run default; all six supported languages remain selectable.
+    int renderDistanceChunks=6;
+    int chunkBuildsPerFrame=4;
+    float mouseSensitivity=0.0025f;
+    float fieldOfView=70.0f;
+    load_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
+    std::string languageCode(mc::i18n::languages()[std::size_t(languageIndex)].code);
     { std::ifstream saveFile(MCC_WORLD_SAVE_PATH,std::ios::binary); if(saveFile) world.load(saveFile); }
 
     InitWindow(1280,720,"Mine C++ Clone - playable voxel prototype");
@@ -991,13 +998,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             motionX=motionY=motionZ=0.0;
         }
     }
-    int languageIndex=1; // Russian is the first-run default; all six supported languages remain selectable.
-    int renderDistanceChunks=6;
-    int chunkBuildsPerFrame=4;
-    float mouseSensitivity=0.0025f;
-    float fieldOfView=70.0f;
-    load_options_file(languageIndex,renderDistanceChunks,chunkBuildsPerFrame,fieldOfView,mouseSensitivity);
-    std::string languageCode(mc::i18n::languages()[std::size_t(languageIndex)].code);
     bool inventoryOpen=false;
     bool creativeOpen=false;
     bool paused=false;
@@ -1048,7 +1048,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("C++ EDITION",GetScreenWidth()/2-68,158,22,YELLOW);
             DrawText("A block world is waiting for you",GetScreenWidth()/2-150,194,18,RAYWHITE);
             const int bw=320,bh=44,gap=8,bx=GetScreenWidth()/2-bw/2,by=optionsOpen?180:((multiplayerOpen)?330:300);
-            const char* labels[4]={"Singleplayer","Multiplayer","Options","Quit Game"};
+            const std::string labels[4]={
+                mc::i18n::text("menu.singleplayer",languageCode),
+                mc::i18n::text("menu.multiplayer",languageCode),
+                mc::i18n::text("menu.options",languageCode),
+                mc::i18n::text("menu.quit",languageCode)
+            };
             const int count=(optionsOpen||multiplayerOpen)?1:4;
             const bool menuPad=IsGamepadAvailable(0);
             if(menuPad) {
@@ -1067,13 +1072,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const bool focused=menuSelection==i;
                 DrawRectangleRec(rect,(hover||focused)?Color{25,25,25,245}:Color{75,75,75,225});
                 DrawRectangleLinesEx(rect,2,(hover||focused)?RAYWHITE:Color{25,25,25,255});
-                const char* label=(optionsOpen||multiplayerOpen)?"Back":labels[i];
-                DrawText(label,bx+(bw-MeasureText(label,22))/2,y+10,22,RAYWHITE);
+                const std::string label=(optionsOpen||multiplayerOpen)
+                    ?mc::i18n::text("menu.back",languageCode):labels[i];
+                const Vector2 labelSize=IsFontValid(uiFont)
+                    ?MeasureTextEx(uiFont,label.c_str(),22,1.0f)
+                    :Vector2{float(MeasureText(label.c_str(),22)),22.0f};
+                draw_ui_text(uiFont,label,Vector2{float(bx+bw/2)-labelSize.x*0.5f,float(y+10)},22,RAYWHITE);
                 if((hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))||(focused&&menuConfirm)) {
                     if(optionsOpen||multiplayerOpen) { optionsOpen=false; multiplayerOpen=false; menuSelection=0; }
                     else if(i==0) { inMenu=false; captured=true; DisableCursor(); }
                     else if(i==1) { multiplayerOpen=true; menuSelection=0; }
-                    else if(i==2) { optionsOpen=true; menuSelection=0; }
+                    else if(i==2) { optionsOpen=true; menuSelection=0; settingsSelection=0; }
                     else if(i==3) requestQuit=true;
                 }
             }
@@ -1519,7 +1528,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(paused) {
             DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.72f));
             DrawText("GAME MENU",GetScreenWidth()/2-110,GetScreenHeight()/2-145,34,RAYWHITE);
-            const char* pauseLabels[4]={"Continue","Settings","Save World","Save and Return to Title"};
+            const std::string pauseLabels[4]={
+                mc::i18n::text("pause.continue",languageCode),
+                mc::i18n::text("pause.settings",languageCode),
+                mc::i18n::text("pause.save",languageCode),
+                mc::i18n::text("pause.save_return",languageCode)
+            };
             const int menuW=360,menuH=48,menuGap=12;
             const int menuX=GetScreenWidth()/2-menuW/2;
             const int menuY=GetScreenHeight()/2-70;
@@ -1531,7 +1545,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const bool selectedItem=pauseSelection==i||hover;
                 DrawRectangleRec(item,selectedItem?Color{45,45,45,250}:Color{85,85,85,235});
                 DrawRectangleLinesEx(item,2,selectedItem?YELLOW:LIGHTGRAY);
-                DrawText(pauseLabels[i],menuX+(menuW-MeasureText(pauseLabels[i],22))/2,y+11,22,RAYWHITE);
+                const Vector2 labelSize=IsFontValid(uiFont)
+                    ?MeasureTextEx(uiFont,pauseLabels[i].c_str(),22,1.0f)
+                    :Vector2{float(MeasureText(pauseLabels[i].c_str(),22)),22.0f};
+                draw_ui_text(uiFont,pauseLabels[i],
+                    Vector2{float(menuX+menuW/2)-labelSize.x*0.5f,float(y+11)},22,RAYWHITE);
             }
             DrawText(saveStatus.c_str(),GetScreenWidth()/2-MeasureText(saveStatus.c_str(),16)/2,
                      menuY+3*(menuH+menuGap)+4,16,YELLOW);
@@ -1541,7 +1559,6 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                      menuY+4*(menuH+menuGap)+40,14,LIGHTGRAY);
             if(pauseSettings) {
                 DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.82f));
-                DrawText("SETTINGS",GetScreenWidth()/2-85,GetScreenHeight()/2-105,30,RAYWHITE);
                 const bool up=IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP));
                 const bool down=IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN));
                 const bool left=IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT));
