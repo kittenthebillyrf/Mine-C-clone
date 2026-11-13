@@ -218,30 +218,31 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
     // 4x8x4 blocks using trilinear interpolation.
     for(int cell_x=0;cell_x<4;++cell_x) {
         for(int cell_z=0;cell_z<4;++cell_z) {
-            for(int cell_y=0;cell_y<32;++cell_y) {
-                const int node_y=cell_y/8;
-                const double fy=double(cell_y%8)/8.0;
-                for(int sub_x=0;sub_x<4;++sub_x) {
-                    const double fx=double(sub_x)/4.0;
-                    for(int sub_z=0;sub_z<4;++sub_z) {
-                        const double fz=double(sub_z)/4.0;
-                        const double a=lerp(lerp(density.at(cell_x,cell_z,node_y),
-                            density.at(cell_x+1,cell_z,node_y),fx),
-                            lerp(density.at(cell_x,cell_z+1,node_y),
-                            density.at(cell_x+1,cell_z+1,node_y),fx),fz);
-                        const double b=lerp(lerp(density.at(cell_x,cell_z,node_y+1),
-                            density.at(cell_x+1,cell_z,node_y+1),fx),
-                            lerp(density.at(cell_x,cell_z+1,node_y+1),
-                            density.at(cell_x+1,cell_z+1,node_y+1),fx),fz);
-                        const double value=lerp(a,b,fy);
-                        const int x=cell_x*4+sub_x;
-                        const int z=cell_z*4+sub_z;
-                        const int y=cell_y;
-                        const int world_x=ox+x,world_z=oz+z;
-                        if(value>0.0) {
-                            world.set_block(world_x,y,world_z,y==0?BlockId::Bedrock:BlockId::Stone);
-                        } else if(y<=sea) {
-                            world.set_block(world_x,y,world_z,BlockId::Water);
+            for(int node_y=0;node_y<32;++node_y) {
+                for(int sub_y=0;sub_y<8;++sub_y) {
+                    const double fy=double(sub_y)/8.0;
+                    for(int sub_x=0;sub_x<4;++sub_x) {
+                        const double fx=double(sub_x)/4.0;
+                        for(int sub_z=0;sub_z<4;++sub_z) {
+                            const double fz=double(sub_z)/4.0;
+                            const double a=lerp(lerp(density.at(cell_x,cell_z,node_y),
+                                density.at(cell_x+1,cell_z,node_y),fx),
+                                lerp(density.at(cell_x,cell_z+1,node_y),
+                                density.at(cell_x+1,cell_z+1,node_y),fx),fz);
+                            const double b=lerp(lerp(density.at(cell_x,cell_z,node_y+1),
+                                density.at(cell_x+1,cell_z,node_y+1),fx),
+                                lerp(density.at(cell_x,cell_z+1,node_y+1),
+                                density.at(cell_x+1,cell_z+1,node_y+1),fx),fz);
+                            const double value=lerp(a,b,fy);
+                            const int x=cell_x*4+sub_x;
+                            const int z=cell_z*4+sub_z;
+                            const int y=node_y*8+sub_y;
+                            const int world_x=ox+x,world_z=oz+z;
+                            if(value>0.0) {
+                                world.set_block(world_x,y,world_z,y==0?BlockId::Bedrock:BlockId::Stone);
+                            } else if(y<=sea) {
+                                world.set_block(world_x,y,world_z,BlockId::Water);
+                            }
                         }
                     }
                 }
