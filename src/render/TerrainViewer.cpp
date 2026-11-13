@@ -175,7 +175,9 @@ int face_texture_slot(mc::world::BlockId id,Vector3 normal) {
 }
 Model make_block_model(mc::world::BlockId id,Texture2D texture) {
     if(texture_slot(id)<0 || texture.id==0) return Model{};
-    Mesh mesh=GenMeshCube(BLOCK,BLOCK,BLOCK);
+    // Oak slabs are lower-half blocks in the default 1.12 state (half=bottom).
+    const bool lowerSlab=id==mc::world::BlockId::OakSlab;
+    Mesh mesh=GenMeshCube(BLOCK,lowerSlab?BLOCK*0.5f:BLOCK,BLOCK);
     for(int vertex=0;vertex<mesh.vertexCount;++vertex) {
         const Vector3 normal={mesh.normals[vertex*3],mesh.normals[vertex*3+1],mesh.normals[vertex*3+2]};
         const int slot=face_texture_slot(id,normal);
@@ -195,8 +197,11 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
         DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
     }
-    if(index<mc::world::BLOCK_ID_COUNT && models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
-    else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
+    if(index<mc::world::BLOCK_ID_COUNT && models[index].meshCount>0) {
+        Vector3 modelCenter=center;
+        if(id==mc::world::BlockId::OakSlab) modelCenter.y-=BLOCK*0.25f;
+        DrawModel(models[index],modelCenter,1.0f,WHITE);
+    } else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
 struct PlayerAabb {
