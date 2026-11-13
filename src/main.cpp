@@ -68,6 +68,9 @@ bool run_world_self_test() {
         if(info.id!=id || info.name.empty() || !info.solid) return false;
     }
     if(!world.set_block(4,12,4,mc::world::BlockId::DarkOakStairs)) return false;
+    const mc::world::BlockState stairState{1,0,0,0};
+    if(!world.set_block_state(4,12,4,stairState)) return false;
+    if(!world.get_block_state(4,12,4) || world.get_block_state(4,12,4)->facing!=1) return false;
     // Falling-block simulation: sand and gravel descend one cell per tick,
     // replace liquids, and stop on a solid support.
     if(!world.set_block(2,0,2,mc::world::BlockId::Stone) ||
@@ -91,6 +94,10 @@ bool run_world_self_test() {
        restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
        restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass ||
        restored.get_block(4,12,4)!=mc::world::BlockId::DarkOakStairs) return false;
+    const auto* restoredStair=restored.get_block_state(4,12,4);
+    if(!restoredStair || restoredStair->facing!=1 || restoredStair->shape!=0) return false;
+    if(!restored.set_block(4,12,4,mc::world::BlockId::Air) ||
+       restored.get_block_state(4,12,4)!=nullptr) return false;
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
 }
 }
