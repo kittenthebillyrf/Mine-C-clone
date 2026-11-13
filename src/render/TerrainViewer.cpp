@@ -280,57 +280,104 @@ Model make_block_model(mc::world::BlockId id,Texture2D texture) {
 
 Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
     if(data.empty() || texture.id==0) return Model{};
+
+    // Greedy meshing removes hidden faces, but a large quad must still repeat
+    // its 16x16 tile once per block. Expand only the visible greedy quads into
+    // per-block UV tiles; geometry remains in one GPU mesh/draw call.
+    std::vector<ChunkMeshVertex> tiled;
+    std::vector<std::uint16_t> tiledIndices;
+    tiled.reserve(data.vertices.size()*2);
+    tiledIndices.reserve(data.indices.size()*2);
+    const auto mix=[](float a,float b,float t) { return a+(b-a)*t; };
+    const auto interpolate=[&](const ChunkMeshVertex& a,const ChunkMeshVertex& b,
+                               float t) {
+        ChunkMeshVertex out=a;
+        out.x=mix(a.x,b.x,t); out.y=mix(a.y,b.y,t); out.z=mix(a.z,b.z,t);
+        return out;
+    };
+    for(std::size_t face=0;face+3<data.vertices.size();face+=4) {
+        const auto& v0=data.vertices[face+0];
+        const auto& v1=data.vertices[face+1];
+        const auto& v2=data.vertices[face+2];
+        const auto& v3=data.vertices[face+3];
+        const Vector3 normal{v0.nx,v0.ny,v0.nz};
+        const auto raw_uv=[&](const ChunkMeshVertex& v) {
+            if(std::abs(normal.x)>0.5f) return Vector2{v.z,v.y};
+            if(std::abs(normal.y)>0.5f) return Vector2{v.x,v.z};
+            return Vector2{v.x,v.y};
+        };
+        const Vector2 uv0=raw_uv(v0),uv2=raw_uv(v2);
+        const int uTiles=std::max(1,int(std::lround(std::abs(uv2.x-uv0.x))));
+        const int vTiles=std::max(1,int(std::lround(std::abs(uv2.y-uv0.y))));
+        const std::size_t added=std::size_t(uTiles)*std::size_t(vTiles)*4u;
+        if(tiled.size()+added>65532u) return Model{};
+
+        for(int y=0;y<vTiles;++y) for(int x=0;x<uTiles;++x) {
+            const float u0=float(x)/float(uTiles),u1=float(x+1)/float(uTiles);
+            const float v0f=float(y)/float(vTiles),v1f=float(y+1)/float(vTiles);
+            const auto left0=interpolate(v0,v3,u0);
+            const auto left1=interpolate(v1,v2,u0);
+            const auto right0=interpolate(v0,v3,u1);
+            const auto right1=interpolate(v1,v2,u1);
+            const ChunkMeshVertex quad[4]={
+                interpolate(left0,left1,v0f),
+                interpolate(left0,left1,v1f),
+                interpolate(right0,right1,v1f),
+                interpolate(right0,right1,v0f)
+            };
+            const auto first=static_cast<std::uint16_t>(tiled.size());
+            for(const auto& vertex:quad) tiled.push_back(vertex);
+            tiledIndices.insert(tiledIndices.end(),{
+                first,static_cast<std::uint16_t>(first+1),static_cast<std::uint16_t>(first+2),
+                first,static_cast<std::uint16_t>(first+2),static_cast<std::uint16_t>(first+3)});
+        }
+    }
+
     Mesh mesh{};
-    mesh.vertexCount=static_cast<int>(data.vertices.size());
-    mesh.triangleCount=static_cast<int>(data.indices.size()/3);
-    mesh.vertices=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*3));
-    mesh.normals=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*3));
-    mesh.texcoords=static_cast<float*>(MemAlloc(sizeof(float)*data.vertices.size()*2));
-    mesh.colors=static_cast<unsigned char*>(MemAlloc(sizeof(unsigned char)*data.vertices.size()*4));
-    mesh.indices=static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short)*data.indices.size()));
+    mesh.vertexCount=static_cast<int>(tiled.size());
+    mesh.triangleCount=static_cast<int>(tiledIndices.size()/3);
+    mesh.vertices=static_cast<float*>(MemAlloc(sizeof(float)*tiled.size()*3));
+    mesh.normals=static_cast<float*>(MemAlloc(sizeof(float)*tiled.size()*3));
+    mesh.texcoords=static_cast<float*>(MemAlloc(sizeof(float)*tiled.size()*2));
+    mesh.colors=static_cast<unsigned char*>(MemAlloc(sizeof(unsigned char)*tiled.size()*4));
+    mesh.indices=static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short)*tiledIndices.size()));
     if(!mesh.vertices||!mesh.normals||!mesh.texcoords||!mesh.colors||!mesh.indices) {
         if(mesh.vertices)MemFree(mesh.vertices);if(mesh.normals)MemFree(mesh.normals);
         if(mesh.texcoords)MemFree(mesh.texcoords);if(mesh.colors)MemFree(mesh.colors);
         if(mesh.indices)MemFree(mesh.indices);
         return Model{};
     }
-    for(std::size_t face=0;face+3<data.vertices.size();face+=4) {
-        const auto& first=data.vertices[face];
-        const Vector3 normal{first.nx,first.ny,first.nz};
-        const int slot=std::clamp(face_texture_slot(static_cast<mc::world::BlockId>(first.block_id),normal),0,127);
+    for(std::size_t i=0;i<tiled.size();++i) {
+        const auto& vertex=tiled[i];
+        const int slot=std::clamp(face_texture_slot(
+            static_cast<mc::world::BlockId>(vertex.block_id),Vector3{vertex.nx,vertex.ny,vertex.nz}),0,127);
         const float tileX=float(slot%16),tileY=float(slot/16);
-        float minU=1e30f,maxU=-1e30f,minV=1e30f,maxV=-1e30f;
-        auto raw_uv=[&](const ChunkMeshVertex& vertex) {
-            if(std::abs(normal.x)>0.5f) return Vector2{vertex.z,vertex.y};
-            if(std::abs(normal.y)>0.5f) return Vector2{vertex.x,vertex.z};
-            return Vector2{vertex.x,vertex.y};
-        };
-        for(std::size_t k=0;k<4;++k) {
-            const Vector2 uv=raw_uv(data.vertices[face+k]);
-            minU=std::min(minU,uv.x);maxU=std::max(maxU,uv.x);
-            minV=std::min(minV,uv.y);maxV=std::max(maxV,uv.y);
-        }
-        const float du=std::max(1e-6f,maxU-minU),dv=std::max(1e-6f,maxV-minV);
-        for(std::size_t k=0;k<4;++k) {
-            const std::size_t index=face+k;
-            const auto& vertex=data.vertices[index];
-            mesh.vertices[index*3+0]=vertex.x*BLOCK;
-            mesh.vertices[index*3+1]=vertex.y*BLOCK;
-            mesh.vertices[index*3+2]=vertex.z*BLOCK;
-            mesh.normals[index*3+0]=vertex.nx;
-            mesh.normals[index*3+1]=vertex.ny;
-            mesh.normals[index*3+2]=vertex.nz;
-            mesh.colors[index*4+0]=vertex.light;
-            mesh.colors[index*4+1]=vertex.light;
-            mesh.colors[index*4+2]=vertex.light;
-            mesh.colors[index*4+3]=255;
-            const Vector2 uv=raw_uv(vertex);
-            const float localU=(uv.x-minU)/du,localV=(uv.y-minV)/dv;
-            mesh.texcoords[index*2+0]=(tileX+0.001f+localU*0.998f)/16.0f;
-            mesh.texcoords[index*2+1]=(tileY+0.001f+localV*0.998f)/8.0f;
-        }
+        mesh.vertices[i*3+0]=vertex.x*BLOCK;
+        mesh.vertices[i*3+1]=vertex.y*BLOCK;
+        mesh.vertices[i*3+2]=vertex.z*BLOCK;
+        mesh.normals[i*3+0]=vertex.nx;
+        mesh.normals[i*3+1]=vertex.ny;
+        mesh.normals[i*3+2]=vertex.nz;
+        mesh.colors[i*4+0]=vertex.light;
+        mesh.colors[i*4+1]=vertex.light;
+        mesh.colors[i*4+2]=vertex.light;
+        mesh.colors[i*4+3]=255;
+        const Vector2 uv=(std::abs(vertex.nx)>0.5f)
+            ?Vector2{vertex.z,vertex.y}
+            :(std::abs(vertex.ny)>0.5f?Vector2{vertex.x,vertex.z}:Vector2{vertex.x,vertex.y});
+        const Vector2 base=(std::abs(vertex.nx)>0.5f)
+            ?Vector2{tiled[i].z,tiled[i].y}
+            :(std::abs(vertex.ny)>0.5f?Vector2{tiled[i].x,tiled[i].z}:Vector2{tiled[i].x,tiled[i].y});
+        (void)base;
+        // Each emitted quad spans exactly one block, so its UVs are derived
+        // from its local corner coordinates rather than the full greedy quad.
+        const std::size_t corner=i%4;
+        const float localU=(corner==2||corner==3)?1.0f:0.0f;
+        const float localV=(corner==1||corner==2)?1.0f:0.0f;
+        mesh.texcoords[i*2+0]=(tileX+0.001f+localU*0.998f)/16.0f;
+        mesh.texcoords[i*2+1]=(tileY+0.001f+localV*0.998f)/8.0f;
     }
-    std::copy(data.indices.begin(),data.indices.end(),mesh.indices);
+    std::copy(tiledIndices.begin(),tiledIndices.end(),mesh.indices);
     UploadMesh(&mesh,false);
     Model model=LoadModelFromMesh(mesh);
     if(model.materialCount>0) model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
