@@ -173,8 +173,8 @@ int face_texture_slot(mc::world::BlockId id,Vector3 normal) {
         default: return texture_slot(id);
     }
 }
-Model make_block_model(mc::world::BlockId id,const Image& atlas) {
-    if(texture_slot(id)<0 || !IsImageValid(atlas)) return Model{};
+Model make_block_model(mc::world::BlockId id,Texture2D texture) {
+    if(texture_slot(id)<0 || texture.id==0) return Model{};
     Mesh mesh=GenMeshCube(BLOCK,BLOCK,BLOCK);
     for(int vertex=0;vertex<mesh.vertexCount;++vertex) {
         const Vector3 normal={mesh.normals[vertex*3],mesh.normals[vertex*3+1],mesh.normals[vertex*3+2]};
@@ -186,9 +186,7 @@ Model make_block_model(mc::world::BlockId id,const Image& atlas) {
         mesh.texcoords[vertex*2+1]=(row+oldV)/8.0f;
     }
     Model model=LoadModelFromMesh(mesh);
-    Texture2D texture=LoadTextureFromImage(atlas);
-    if(texture.id!=0) SetTextureFilter(texture,TEXTURE_FILTER_POINT);
-    if(model.materialCount>0 && texture.id!=0)
+    if(model.materialCount>0)
         model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
     return model;
 }
@@ -547,13 +545,16 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     Model blockModels[BLOCK_ID_COUNT]{};
     Image blockAtlas=LoadImage("assets/blocks_atlas_1_12.png");
     if(!IsImageValid(blockAtlas)) blockAtlas=LoadImage("../assets/blocks_atlas_1_12.png");
+    Texture2D blockTexture={0};
     if(IsImageValid(blockAtlas)) {
+        blockTexture=LoadTextureFromImage(blockAtlas);
+        if(blockTexture.id!=0) SetTextureFilter(blockTexture,TEXTURE_FILTER_POINT);
         for(unsigned int raw=1;raw<BLOCK_ID_COUNT;++raw) {
             const BlockId id=static_cast<BlockId>(raw);
-            blockModels[raw]=make_block_model(id,blockAtlas);
+            blockModels[raw]=make_block_model(id,blockTexture);
         }
+        UnloadImage(blockAtlas);
     }
-    if(IsImageValid(blockAtlas)) UnloadImage(blockAtlas);
     double px=double(size)*0.5,pz=double(size)*0.5;
     double py=double(surface_y(world,int(px),int(pz)));
     double motionX=0.0,motionY=0.0,motionZ=0.0;
@@ -877,7 +878,14 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndDrawing();
     }
     { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
-    for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) if(blockModels[i].meshCount>0) UnloadModel(blockModels[i]);
+    for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) {
+        if(blockModels[i].meshCount>0) {
+            for(int material=0;material<blockModels[i].materialCount;++material)
+                blockModels[i].materials[material].maps[MATERIAL_MAP_DIFFUSE].texture.id=0;
+            UnloadModel(blockModels[i]);
+        }
+    }
+    if(blockTexture.id!=0) UnloadTexture(blockTexture);
     EnableCursor();
     CloseWindow();
     return 0;
