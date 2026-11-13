@@ -221,7 +221,15 @@ Model make_block_model(mc::world::BlockId id,Texture2D texture) {
         model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
     return model;
 }
-void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
+bool fence_connects_to(mc::world::BlockId id) {
+    using mc::world::BlockId;
+    if(id==BlockId::Air || id==BlockId::Water || id==BlockId::Lava ||
+       id==BlockId::Glass || id==BlockId::Ice || id==BlockId::Torch ||
+       id==BlockId::Cactus || is_wood_slab(id)) return false;
+    return mc::world::block_info(id).solid || is_wood_fence(id);
+}
+void draw_block(Model* models,const mc::world::World& world,mc::world::BlockId id,
+                int blockX,int blockY,int blockZ,Vector3 center) {
     const auto index=static_cast<unsigned int>(id);
     if(id==mc::world::BlockId::Torch) {
         // Compact upright torch: dark wooden shaft, warm collar, animated-looking flame.
@@ -253,11 +261,17 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
             // Default connected-fence silhouette; all pieces use this wood species' plank texture.
             const Model& fence=models[static_cast<unsigned int>(wood_planks_for(id))];
             DrawModelEx(fence,center,Vector3{0,1,0},0.0f,Vector3{0.25f,1.0f,0.25f},WHITE);
+            const bool north=fence_connects_to(world.get_block(blockX,blockY,blockZ-1));
+            const bool south=fence_connects_to(world.get_block(blockX,blockY,blockZ+1));
+            const bool west=fence_connects_to(world.get_block(blockX-1,blockY,blockZ));
+            const bool east=fence_connects_to(world.get_block(blockX+1,blockY,blockZ));
             for(float y : {-0.35f,0.35f}) {
-                DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
-                            Vector3{1.0f,0.1875f,0.1875f},WHITE);
-                DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
-                            Vector3{0.1875f,0.1875f,1.0f},WHITE);
+                if(west || east)
+                    DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
+                                Vector3{1.0f,0.1875f,0.1875f},WHITE);
+                if(north || south)
+                    DrawModelEx(fence,Vector3{center.x,center.y+y,center.z},Vector3{0,1,0},0.0f,
+                                Vector3{0.1875f,0.1875f,1.0f},WHITE);
             }
             return;
         }
@@ -672,7 +686,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     for(int y=std::max(0,top-5);y<top;++y) {
                         const BlockId id=world.get_block(x,y,z);
                         if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air))
-                            draw_block(blockModels,id,block_center(x,y,z));
+                            draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
                     }
                 }
             }
@@ -868,7 +882,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
                    world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
-                draw_block(blockModels,id,block_center(x,y,z));
+                draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
             }
         }
         EndMode3D();
