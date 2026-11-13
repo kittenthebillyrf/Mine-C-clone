@@ -58,6 +58,10 @@ prepare-romfs:
 	@test -s ../assets/block_texture_map.json
 	@cp -f ../assets/blocks_atlas_1_12.png $(ROMFS)/assets/
 	@cp -f ../assets/block_texture_map.json $(ROMFS)/assets/
+	@test -s ../assets/dejavu.fnt
+	@test -s ../assets/dejavu.png
+	@cp -f ../assets/dejavu.fnt $(ROMFS)/assets/
+	@cp -f ../assets/dejavu.png $(ROMFS)/assets/
 $(BUILD):
 	@mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
