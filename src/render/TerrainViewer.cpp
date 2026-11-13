@@ -707,7 +707,7 @@ bool save_world_file(const mc::world::World& world,
     {
         std::ofstream output(playerTemp,std::ios::trunc);
         if(!output) return false;
-        output << "MCCPLAYER 1\\n" << std::setprecision(17)
+        output << "MCCPLAYER 1\n" << std::setprecision(17)
                << px << ' ' << py << ' ' << pz << ' '
                << motionX << ' ' << motionY << ' ' << motionZ << ' '
                << yaw << ' ' << pitch << ' ' << selected << '\\n';
@@ -717,7 +717,7 @@ bool save_world_file(const mc::world::World& world,
         output.flush();
         if(!output) return false;
     }
-    std::remove("world.mcc.tmp");
+    std::remove("world.mcc");
     if(std::rename(worldTemp.c_str(),"world.mcc")!=0) return false;
     std::remove("world.mcc.player");
     if(std::rename(playerTemp.c_str(),"world.mcc.player")!=0) return false;
@@ -753,7 +753,7 @@ bool load_player_state(double& px,double& py,double& pz,
     px=x;py=y;pz=z;motionX=vx;motionY=vy;motionZ=vz;
     yaw=loadedYaw;pitch=std::clamp(loadedPitch,-1.55f,1.55f);
     selected=hotbar;
-    std::copy(std::begin(loaded),std::end(loaded),inventory);
+    std::copy_n(loaded,INVENTORY_SIZE,inventory);
     return true;
 }
 bool add_item(ItemStack* inventory, mc::world::BlockId id) {
