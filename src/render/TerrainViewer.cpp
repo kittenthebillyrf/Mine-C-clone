@@ -178,7 +178,9 @@ Model make_block_model(mc::world::BlockId id,Texture2D texture) {
     if(texture_slot(id)<0 || texture.id==0) return Model{};
     // Oak slabs are lower-half blocks in the default 1.12 state (half=bottom).
     const bool lowerSlab=id==mc::world::BlockId::OakSlab;
-    Mesh mesh=GenMeshCube(BLOCK,lowerSlab?BLOCK*0.5f:BLOCK,BLOCK);
+    // Vanilla cactus has a one-pixel inset on all four horizontal sides.
+    const float horizontalSize=id==mc::world::BlockId::Cactus?BLOCK*0.875f:BLOCK;
+    Mesh mesh=GenMeshCube(horizontalSize,lowerSlab?BLOCK*0.5f:BLOCK,horizontalSize);
     for(int vertex=0;vertex<mesh.vertexCount;++vertex) {
         const Vector3 normal={mesh.normals[vertex*3],mesh.normals[vertex*3+1],mesh.normals[vertex*3+2]};
         const int slot=face_texture_slot(id,normal);
