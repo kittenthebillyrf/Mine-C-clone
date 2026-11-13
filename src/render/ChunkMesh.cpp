@@ -20,7 +20,7 @@ constexpr Face faces[6]={
 };
 // This mesher emits only axis-aligned full cubes. Non-cube blocks stay on
 // the existing model renderer until their dedicated geometry is supported.
-bool is_full_cube(mc::world::BlockId id) {
+bool full_cube(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch(id) {
         case BlockId::Air:
@@ -61,7 +61,7 @@ bool is_full_cube(mc::world::BlockId id) {
     }
 }
 bool occludes(mc::world::BlockId id) {
-    return is_full_cube(id);
+    return full_cube(id);
 }
 int axis_of(const std::array<float,3>& edge) {
     for(int axis=0;axis<3;++axis) if(edge[std::size_t(axis)]!=0.0f) return axis;
@@ -80,6 +80,8 @@ bool ChunkMeshData::is_current(const mc::world::World& world,int cx,int cz) cons
            neighbor_revisions[2]==world.chunk_revision(cx,cz-1) &&
            neighbor_revisions[3]==world.chunk_revision(cx,cz+1);
 }
+
+bool ChunkMeshBuilder::is_full_cube_block(mc::world::BlockId id) { return full_cube(id); }
 
 ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int cz,int sectionY) {
     ChunkMeshData out;
