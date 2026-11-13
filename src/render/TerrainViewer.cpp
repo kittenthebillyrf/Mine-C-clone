@@ -551,6 +551,19 @@ bool move_player_entity(const mc::world::World& world,double& px,double& py,doub
     collidedVertically=(originalY!=dy);
     onGround=collidedVertically && originalY<0.0;
     if(collidedHorizontally) { /* motion is zeroed by caller */ }
+    // Final invariant: never commit a position whose player AABB intersects
+    // a solid collision shape. This also protects against future shape/step
+    // solver regressions; the previous non-penetrating position is retained.
+    if(!collision_boxes(world,box).empty()) {
+        px=(originalBox.minX+originalBox.maxX)*0.5;
+        py=originalBox.minY;
+        pz=(originalBox.minZ+originalBox.maxZ)*0.5;
+        dx=dy=dz=0.0;
+        collidedHorizontally=true;
+        collidedVertically=true;
+        onGround=true;
+        return false;
+    }
     px=(box.minX+box.maxX)*0.5;
     py=box.minY;
     pz=(box.minZ+box.maxZ)*0.5;
@@ -654,6 +667,19 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
+bool save_world_file(const mc::world::World& world) {
+    const std::string temporary="world.mcc.tmp";
+    {
+        std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
+        if(!output || !world.save(output)) return false;
+        output.flush();
+        if(!output) return false;
+    }
+    // Replace the previous save only after the new file has been fully written.
+    std::remove("world.mcc");
+    if(std::rename(temporary.c_str(),"world.mcc")!=0) return false;
+    return true;
+}
 bool add_item(ItemStack* inventory, mc::world::BlockId id) {
     // Merge into existing stacks before using an empty slot.
     for(int i=0;i<INVENTORY_SIZE;++i) {
@@ -736,6 +762,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool inventoryOpen=false;
     bool creativeOpen=false;
     bool paused=false;
+    int pauseSelection=0;
+    std::string saveStatus="World loaded - custom .mcc format";
     bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
@@ -822,6 +850,40 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             inventoryOpen=false; creativeOpen=false;
             captured=!paused;
             if(captured) DisableCursor(); else EnableCursor();
+        }
+        if(paused) {
+            constexpr int PAUSE_ACTIONS=3;
+            if(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)))
+                pauseSelection=(pauseSelection+PAUSE_ACTIONS-1)%PAUSE_ACTIONS;
+            if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)))
+                pauseSelection=(pauseSelection+1)%PAUSE_ACTIONS;
+            const bool confirm=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+            const Vector2 pauseMouse=GetMousePosition();
+            const int menuW=360,menuH=48,menuGap=12;
+            const int menuX=GetScreenWidth()/2-menuW/2;
+            const int menuY=GetScreenHeight()/2-70;
+            for(int i=0;i<PAUSE_ACTIONS;++i) {
+                const Rectangle item{float(menuX),float(menuY+i*(menuH+menuGap)),float(menuW),float(menuH)};
+                const bool hover=CheckCollisionPointRec(pauseMouse,item);
+                if(hover) pauseSelection=i;
+                if((hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))||(pauseSelection==i&&confirm)) {
+                    if(i==0) {
+                        paused=false; captured=true; DisableCursor(); pauseSelection=0;
+                    } else if(i==1) {
+                        if(save_world_file(world)) saveStatus="Saved successfully: world.mcc";
+                        else saveStatus="Save failed - storage unavailable";
+                    } else {
+                        if(save_world_file(world)) {
+                            saveStatus="Saved successfully: world.mcc";
+                            requestQuit=true;
+                        } else saveStatus="Save failed - exit cancelled";
+                    }
+                    break;
+                }
+            }
+            if(requestQuit) {
+                // Leave the loop through the common cleanup path below.
+            }
         }
         if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)))) {
             inventoryOpen=!inventoryOpen; creativeOpen=false;
@@ -1025,9 +1087,28 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("Page Up / Page Down or L1 / R1: pages    R: close",panelX+20,panelY+430,14,RAYWHITE);
         }
         if(paused) {
-            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.68f));
-            DrawText("PAUSED",GetScreenWidth()/2-75,GetScreenHeight()/2-75,36,RAYWHITE);
-            DrawText("Press + / START / ESC to resume",GetScreenWidth()/2-180,GetScreenHeight()/2-18,20,RAYWHITE);
+            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.72f));
+            DrawText("GAME MENU",GetScreenWidth()/2-110,GetScreenHeight()/2-145,34,RAYWHITE);
+            const char* pauseLabels[3]={"Continue","Save World","Save and Quit"};
+            const int menuW=360,menuH=48,menuGap=12;
+            const int menuX=GetScreenWidth()/2-menuW/2;
+            const int menuY=GetScreenHeight()/2-70;
+            const Vector2 pauseMouse=GetMousePosition();
+            for(int i=0;i<3;++i) {
+                const int y=menuY+i*(menuH+menuGap);
+                const Rectangle item{float(menuX),float(y),float(menuW),float(menuH)};
+                const bool hover=CheckCollisionPointRec(pauseMouse,item);
+                const bool selectedItem=pauseSelection==i||hover;
+                DrawRectangleRec(item,selectedItem?Color{45,45,45,250}:Color{85,85,85,235});
+                DrawRectangleLinesEx(item,2,selectedItem?YELLOW:LIGHTGRAY);
+                DrawText(pauseLabels[i],menuX+(menuW-MeasureText(pauseLabels[i],22))/2,y+11,22,RAYWHITE);
+            }
+            DrawText(saveStatus.c_str(),GetScreenWidth()/2-MeasureText(saveStatus.c_str(),16)/2,
+                     menuY+3*(menuH+menuGap)+4,16,YELLOW);
+            DrawText("D-pad / arrows: select    A / Enter: confirm    B / Esc: resume",
+                     GetScreenWidth()/2-260,menuY+3*(menuH+menuGap)+34,14,RAYWHITE);
+            DrawText("World format: Mine C++ Clone (.mcc) - not Java Anvil",
+                     GetScreenWidth()/2-220,menuY+3*(menuH+menuGap)+58,14,LIGHTGRAY);
         }
         if(inventoryOpen) {
             const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
@@ -1050,8 +1131,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
         DrawFPS(GetScreenWidth()-90,12);
         EndDrawing();
+        if(requestQuit) break;
     }
-    { std::ofstream saveFile("world.mcc",std::ios::binary|std::ios::trunc); if(saveFile) world.save(saveFile); }
+    if(!requestQuit) save_world_file(world);
     for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) {
         if(blockModels[i].meshCount>0) {
             for(int material=0;material<blockModels[i].materialCount;++material)
