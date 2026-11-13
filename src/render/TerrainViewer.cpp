@@ -1583,25 +1583,23 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             const float renderRadiusSq=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
-            // Reuse the candidate buffer: allocating and freeing this vector every
-            // frame creates avoidable allocator traffic while the camera moves.
-            struct ChunkCandidate { float distanceSq; int x; int z; };
-            static std::vector<ChunkCandidate> orderedChunks;
-            orderedChunks.clear();
-            const std::size_t candidateCapacity=
-                std::size_t(lastChunkX-firstChunkX+1)*std::size_t(lastChunkZ-firstChunkZ+1);
-            if(orderedChunks.capacity()<candidateCapacity) orderedChunks.reserve(candidateCapacity);
-            for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx) {
-                if(!world.find_chunk(cx,cz)) continue;
-                const float dx=float(cx*Chunk::Width+8)-float(px);
-                const float dz=float(cz*Chunk::Depth+8)-float(pz);
-                const float distanceSq=dx*dx+dz*dz;
-                if(distanceSq<=renderRadiusSq) orderedChunks.push_back(ChunkCandidate{distanceSq,cx,cz});
-            }
-            std::sort(orderedChunks.begin(),orderedChunks.end(),
-                [](const ChunkCandidate& a,const ChunkCandidate& b){return a.distanceSq<b.distanceSq;});
-            for(const auto& candidate:orderedChunks) {
-                const int cx=candidate.x,cz=candidate.z;
+            // Visit chunk coordinates in expanding square rings around the player.
+            // This naturally prioritizes nearby chunks and avoids allocating,
+            // filling and sorting a candidate vector on every rendered frame.
+            const int playerChunkX=int(std::floor(px))/Chunk::Width;
+            const int playerChunkZ=int(std::floor(pz))/Chunk::Depth;
+            const int maxRing=std::max({
+                std::abs(firstChunkX-playerChunkX),std::abs(lastChunkX-playerChunkX),
+                std::abs(firstChunkZ-playerChunkZ),std::abs(lastChunkZ-playerChunkZ)});
+            for(int ring=0;ring<=maxRing;++ring) {
+                for(int dz=-ring;dz<=ring;++dz) for(int dx=-ring;dx<=ring;++dx) {
+                    if(ring>0 && std::abs(dx)!=ring && std::abs(dz)!=ring) continue;
+                    const int cx=playerChunkX+dx,cz=playerChunkZ+dz;
+                    if(cx<firstChunkX||cx>lastChunkX||cz<firstChunkZ||cz>lastChunkZ) continue;
+                    const float centerX=float(cx*Chunk::Width+8),centerZ=float(cz*Chunk::Depth+8);
+                    const float distanceX=centerX-float(px),distanceZ=centerZ-float(pz);
+                    if(distanceX*distanceX+distanceZ*distanceZ>renderRadiusSq) continue;
+                    if(!world.find_chunk(cx,cz)) continue;
                 for(int section=firstSection;section<=lastSection;++section) {
                     if(!section_in_frustum(camera,cx,cz,section,GetScreenWidth(),GetScreenHeight())) continue;
                     const auto key=runtime_mesh_key(cx,cz,section);
@@ -1622,6 +1620,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                         ++chunkBuildsThisFrame;
                     }
                     if(cached.model.meshCount>0) DrawModel(cached.model,Vector3{0,0,0},1.0f,WHITE);
+                    }
                 }
             }
         }
