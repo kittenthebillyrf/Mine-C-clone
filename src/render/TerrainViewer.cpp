@@ -46,6 +46,7 @@ constexpr float REACH=7.0f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
 struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
+struct DroppedItem { mc::world::BlockId id=mc::world::BlockId::Air; float x=0,y=0,z=0,velocityY=0; };
 std::uint32_t hash2(int x,int z,std::uint32_t seed) {
     std::uint32_t h=seed^(std::uint32_t(x)*0x8da6b343u)^(std::uint32_t(z)*0xd8163841u);
     h^=h>>13; h*=0x85ebca6bu; h^=h>>16; h*=0xc2b2ae35u; h^=h>>16;
@@ -840,6 +841,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     int selected=0;
     int creativePage=0;
     ItemStack inventory[INVENTORY_SIZE]{};
+    std::vector<DroppedItem> droppedItems;
+    bool creativeMode=false;
     const BlockId startingItems[HOTBAR_SIZE]={
         BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Cobblestone,
         BlockId::OakPlanks,BlockId::OakLog,BlockId::Sand,BlockId::Glass,BlockId::Water
@@ -1004,8 +1007,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 std::string command,arg;
                 commandStream>>command>>arg;
                 if(command=="/help") chatMessage="Commands: /help, /gamemode survival, /gamemode creative";
-                else if(command=="/gamemode" && (arg=="creative"||arg=="survival"))
-                    chatMessage=arg=="creative"?"Creative inventory available with Y":"Survival mode active";
+                else if(command=="/gamemode" && (arg=="creative"||arg=="survival")) {
+                    creativeMode=(arg=="creative");
+                    chatMessage=creativeMode?"Game mode set to Creative":"Game mode set to Survival";
+                }
                 else if(!chatInput.empty()) chatMessage="Unknown command: "+chatInput;
                 chatOpen=false; chatInput.clear(); captured=true; DisableCursor();
             }
@@ -1156,7 +1161,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const BlockId broken=world.get_block(bx,by,bz);
             if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
                 // Never delete a block if its drop cannot fit in the inventory.
-                if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
+                if(creativeMode || add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
             }
         }
         if(!paused&&!inventoryOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)))) {
@@ -1174,11 +1179,35 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                         state.shape=(previous.y<by)?1u:0u;
                         world.set_block_state(bx,by,bz,state);
                     }
-                    --stack.count;
+                    if(!creativeMode) --stack.count;
                 }
             }
         }
 
+        // Dropped stacks have lightweight gravity, ground collision and pickup.
+        if(!paused && !inventoryOpen && !creativeOpen && !chatOpen) {
+            for(auto it=droppedItems.begin();it!=droppedItems.end();) {
+                it->velocityY-=18.0f*dt;
+                const float nextY=it->y+it->velocityY*dt;
+                const int bx=int(std::floor(it->x)),bz=int(std::floor(it->z));
+                const int below=int(std::floor(nextY-0.12f));
+                if(below>=0 && below<Chunk::Height && block_info(world.get_block(bx,below,bz)).solid) {
+                    it->y=float(below+1)+0.12f; it->velocityY=0.0f;
+                } else it->y=nextY;
+                const float dx=float(px)-it->x,dy=float(py+0.8)-it->y,dz=float(pz)-it->z;
+                if(dx*dx+dy*dy+dz*dz<1.8f && add_item(inventory,it->id)) it=droppedItems.erase(it);
+                else ++it;
+            }
+        }
+        if(!paused&&!inventoryOpen&&!creativeOpen&&!chatOpen&&gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) {
+            ItemStack& stack=inventory[selected];
+            if(stack.count>0 && stack.id!=BlockId::Air) {
+                const Vector3 direction{std::sin(yaw)*std::cos(pitch),std::sin(pitch),-std::cos(yaw)*std::cos(pitch)};
+                droppedItems.push_back(DroppedItem{stack.id,float(px+direction.x*0.8f),float(py+1.0+direction.y*0.8f),float(pz+direction.z*0.8f),2.0f});
+                if(!creativeMode) --stack.count;
+                if(stack.count<=0) stack=ItemStack{};
+            }
+        }
         BeginDrawing();
         ClearBackground(Color{135,190,235,255});
         BeginMode3D(camera);
@@ -1208,6 +1237,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     if(it->model.meshCount>0) DrawModel(it->model,Vector3{0,0,0},1.0f,WHITE);
                 }
         }
+        for(const auto& dropped:droppedItems)
+            DrawCube(Vector3{dropped.x*BLOCK,(dropped.y+0.15f)*BLOCK,dropped.z*BLOCK},
+                     0.28f*BLOCK,0.28f*BLOCK,0.28f*BLOCK,color_for(dropped.id));
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x)
             for(int y=minY;y<=maxY;++y) {
                 const BlockId id=world.get_block(x,y,z);
