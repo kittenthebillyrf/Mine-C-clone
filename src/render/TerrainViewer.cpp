@@ -608,6 +608,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool previousForward=false;
     int jumpTicks=0,sprintToggleTimer=0;
     float physicsAccumulator=0.0f;
+    float fallingBlockAccumulator=0.0f;
     int selected=0;
     int creativePage=0;
     ItemStack inventory[INVENTORY_SIZE]{};
@@ -763,6 +764,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                                 jumping,crouching,sprinting,yaw);
             previousForward=forwardNow;
             physicsAccumulator-=PLAYER_TICK;
+            fallingBlockAccumulator+=PLAYER_TICK;
+            if(fallingBlockAccumulator>=0.20f) {
+                world.tick_falling_blocks();
+                fallingBlockAccumulator-=0.20f;
+            }
         }
 
         if(captured) {
