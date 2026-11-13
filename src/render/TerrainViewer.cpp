@@ -180,6 +180,24 @@ bool is_wood_stairs(mc::world::BlockId id) {
     return id==BlockId::OakStairs || id==BlockId::SpruceStairs || id==BlockId::BirchStairs ||
            id==BlockId::JungleStairs || id==BlockId::AcaciaStairs || id==BlockId::DarkOakStairs;
 }
+// BlockState facing follows Minecraft's horizontal order: north, east, south, west.
+// The fallback is south so worlds created before directional states keep their old look.
+int stair_facing(const mc::world::World& world,int x,int y,int z) {
+    const auto* state=world.get_block_state(x,y,z);
+    return state ? int(state->facing&3u) : 2;
+}
+bool stair_upside_down(const mc::world::World& world,int x,int y,int z) {
+    const auto* state=world.get_block_state(x,y,z);
+    return state && (state->shape&1u)!=0;
+}
+Vector3 stair_upper_offset(int facing) {
+    switch(facing&3) {
+        case 0: return Vector3{0,0,-BLOCK*0.25f};
+        case 1: return Vector3{BLOCK*0.25f,0,0};
+        case 2: return Vector3{0,0,BLOCK*0.25f};
+        default:return Vector3{-BLOCK*0.25f,0,0};
+    }
+}
 int texture_slot(mc::world::BlockId id) {
     const int slot=static_cast<int>(wood_planks_for(id));
     return (slot>0 && slot<static_cast<int>(mc::world::BLOCK_ID_COUNT))?slot:-1;
@@ -246,12 +264,16 @@ void draw_block(Model* models,const mc::world::World& world,mc::world::BlockId i
         return;
     }
     if(is_wood_stairs(id) && models[static_cast<unsigned int>(wood_planks_for(id))].meshCount>0) {
-        // Default stair state: lower full-width tread and an upper rear half-step.
         const Model& plank=models[static_cast<unsigned int>(wood_planks_for(id))];
-        DrawModelEx(plank,Vector3{center.x,center.y-BLOCK*0.25f,center.z},
+        const int facing=stair_facing(world,blockX,blockY,blockZ);
+        const bool upsideDown=stair_upside_down(world,blockX,blockY,blockZ);
+        const Vector3 upperOffset=stair_upper_offset(facing);
+        const float fullY=upsideDown?BLOCK*0.25f:-BLOCK*0.25f;
+        const float halfY=upsideDown?-BLOCK*0.25f:BLOCK*0.25f;
+        DrawModelEx(plank,Vector3{center.x,center.y+fullY,center.z},
                     Vector3{0,1,0},0.0f,Vector3{1.0f,0.5f,1.0f},WHITE);
-        DrawModelEx(plank,Vector3{center.x,center.y+BLOCK*0.25f,center.z+BLOCK*0.25f},
-                    Vector3{0,1,0},0.0f,Vector3{1.0f,0.5f,0.5f},WHITE);
+        DrawModelEx(plank,Vector3{center.x+upperOffset.x,center.y+halfY,center.z+upperOffset.z},
+                    Vector3{0,1,0},0.0f,Vector3{0.5f,0.5f,0.5f},WHITE);
         return;
     }
     if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
@@ -325,14 +347,19 @@ std::vector<PlayerAabb> collision_boxes(const mc::world::World& world,const Play
                     continue;
                 }
                 if(is_wood_stairs(id)) {
-                    // Match the default rendered stair: a lower half-block plus
-                    // an upper rear half. Block-state rotation is handled later.
-                    const PlayerAabb lower{double(x),double(y),double(z),
-                                           double(x+1),double(y)+0.5,double(z+1)};
-                    const PlayerAabb upper{double(x),double(y)+0.5,double(z)+0.5,
-                                           double(x+1),double(y)+1.0,double(z+1)};
-                    if(intersects(lower,query)) boxes.push_back(lower);
-                    if(intersects(upper,query)) boxes.push_back(upper);
+                    const int facing=stair_facing(world,x,y,z);
+                    const bool upsideDown=stair_upside_down(world,x,y,z);
+                    const double lowerY=upsideDown?double(y)+0.5:double(y);
+                    const double upperY=upsideDown?double(y):double(y)+0.5;
+                    const PlayerAabb full{double(x),lowerY,double(z),
+                                          double(x+1),lowerY+0.5,double(z+1)};
+                    PlayerAabb half{double(x),upperY,double(z),double(x+1),upperY+0.5,double(z+1)};
+                    if(facing==0) half.maxZ=double(z)+0.5;
+                    else if(facing==1) half.minX=double(x)+0.5;
+                    else if(facing==2) half.minZ=double(z)+0.5;
+                    else half.maxX=double(x)+0.5;
+                    if(intersects(full,query)) boxes.push_back(full);
+                    if(intersects(half,query)) boxes.push_back(half);
                     continue;
                 }
                 if(is_wood_fence(id)) {
