@@ -128,12 +128,41 @@ bool move_player(const world::World& w,double& x,double& y,double& z,double& dx,
         if(std::abs(az-sz)>1e-9)hit_h=true;
         box=offset(box,0,0,az);dz+=az;
     }
+    // Try the vanilla-style 0.6-block step path when grounded horizontal
+    // movement is blocked. Keep it only when it makes more horizontal progress.
+    if(hit_h && was_on_ground && (std::abs(original_x)>1e-9 || std::abs(original_z)>1e-9)) {
+        const Box normal_box=box;
+        const double normal_dx=dx,normal_dz=dz,normal_dy=dy;
+        Box candidate=player_box(x,y,z);
+        auto step_obstacles=shapes(w,offset(candidate,original_x,StepHeight,original_z));
+        double up=StepHeight;
+        for(const auto& o:step_obstacles)up=clip_axis(o,candidate,up,1);
+        candidate=offset(candidate,0,up,0);
+        double step_x=original_x;
+        step_obstacles=shapes(w,offset(candidate,step_x,0,0));
+        for(const auto& o:step_obstacles)step_x=clip_axis(o,candidate,step_x,0);
+        candidate=offset(candidate,step_x,0,0);
+        double step_z=original_z;
+        step_obstacles=shapes(w,offset(candidate,0,0,step_z));
+        for(const auto& o:step_obstacles)step_z=clip_axis(o,candidate,step_z,2);
+        candidate=offset(candidate,0,0,step_z);
+        auto down_obstacles=shapes(w,offset(candidate,0,-up,0));
+        double down=-up;
+        for(const auto& o:down_obstacles)down=clip_axis(o,candidate,down,1);
+        candidate=offset(candidate,0,down,0);
+        const double normal_distance=normal_dx*normal_dx+normal_dz*normal_dz;
+        const double step_distance=step_x*step_x+step_z*step_z;
+        if(step_distance>normal_distance+1e-10 && !collides(w,candidate)) {
+            box=candidate;dx=step_x;dz=step_z;dy=up+down;
+            hit_h=false;hit_v=(std::abs(down+up)>1e-9);on_ground=hit_v;
+        } else {
+            box=normal_box;dx=normal_dx;dy=normal_dy;dz=normal_dz;
+        }
+    }
     // A final invariant check prevents committing any penetrating position.
     if(collides(w,box)){dx=dy=dz=0;hit_h=hit_v=true;return false;}
     x=(box.min_x+box.max_x)*0.5;y=box.min_y;z=(box.min_z+box.max_z)*0.5;
-    on_ground=hit_v&&original_y<0;
-    if(hit_h){ /* caller clears horizontal momentum */ }
-    (void)original_x;(void)original_z;
+    if(!on_ground)on_ground=hit_v&&original_y<0;
     return true;
 }
 }
