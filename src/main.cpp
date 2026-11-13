@@ -45,11 +45,13 @@ bool run_world_self_test() {
     const auto column=generator.sample(0,0);
     if(column.height<5||column.height>205) return false;
     if(generator.sample(0,0).height!=column.height) return false;
+    const mc::world::generation::ChunkGenerator otherSeed(1123);
+    if(otherSeed.sample(0,0).height==column.height && otherSeed.sample(37,-19).height==generator.sample(37,-19).height) return false;
     mc::world::World generated;
     generator.generate_chunk(generated,0,0);
     if(generated.get_block(0,0,0)!=mc::world::BlockId::Bedrock) return false;
     const auto surface=generated.get_block(0,column.height-1,0);
-    if(surface!=mc::world::BlockId::Grass&&surface!=mc::world::BlockId::Sand) return false;
+    if(surface!=mc::world::BlockId::Grass&&surface!=mc::world::BlockId::Sand&&surface!=mc::world::BlockId::Gravel) return false;
     return true;
 }
 }
