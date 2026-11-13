@@ -1,6 +1,7 @@
 #include "TerrainViewer.hpp"
 #include "raylib.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include "../world/World.hpp"
 #include "../world/WorldGen112.hpp"
 #include "../physics/PlayerPhysics.hpp"
@@ -186,7 +187,7 @@ Color color_for(mc::world::BlockId id) {
     }
 }
 // Compact isometric item icon used by the inventory, creative catalog and hotbar.
-void draw_item_icon(mc::world::BlockId id,int x,int y,int size) {
+void draw_item_icon(mc::world::BlockId id,int x,int y,int size,Texture2D atlas) {
     const Color base=color_for(id);
     if(base.a==0) return;
     const float cx=float(x)+float(size)*0.5f;
@@ -194,16 +195,29 @@ void draw_item_icon(mc::world::BlockId id,int x,int y,int size) {
     const float mid=float(y)+float(size)*0.43f;
     const float bottom=float(y)+float(size)*0.83f;
     const float half=float(size)*0.38f;
-    const Vector2 pTop{cx,top},pLeft{cx-half,mid},pRight{cx+half,mid},pFront{cx,bottom};
-    const Color left=Color{static_cast<unsigned char>(base.r*0.72f),static_cast<unsigned char>(base.g*0.72f),static_cast<unsigned char>(base.b*0.72f),base.a};
-    const Color right=Color{static_cast<unsigned char>(base.r*0.86f),static_cast<unsigned char>(base.g*0.86f),static_cast<unsigned char>(base.b*0.86f),base.a};
-    DrawTriangle(pTop,pLeft,pRight,Color{static_cast<unsigned char>(std::min(255,int(base.r)*1.12)),static_cast<unsigned char>(std::min(255,int(base.g)*1.12)),static_cast<unsigned char>(std::min(255,int(base.b)*1.12)),base.a});
-    DrawTriangle(pLeft,pFront,pRight,left);
-    DrawTriangle(pRight,pFront,pTop,right);
-    DrawLineEx(pTop,pLeft,1.0f,Fade(BLACK,0.28f));
-    DrawLineEx(pLeft,pFront,1.0f,Fade(BLACK,0.28f));
-    DrawLineEx(pFront,pRight,1.0f,Fade(BLACK,0.28f));
-    DrawLineEx(pRight,pTop,1.0f,Fade(BLACK,0.28f));
+    const Vector2 a{cx,top},b{cx-half,mid},c{cx,mid+float(size)*0.20f},d{cx+half,mid},e{cx,bottom};
+    const int slot=face_texture_slot(id,Vector3{0,1,0});
+    if(atlas.id!=0 && slot>=0) {
+        const float u0=float(slot%16)/16.0f,u1=float(slot%16+1)/16.0f;
+        const float v0=float(slot/16)/8.0f,v1=float(slot/16+1)/8.0f;
+        const auto tri=[&](Vector2 p0,Vector2 p1,Vector2 p2,Vector2 t0,Vector2 t1,Vector2 t2,Color tint) {
+            rlSetTexture(atlas.id); rlBegin(RL_TRIANGLES); rlColor4ub(tint.r,tint.g,tint.b,tint.a);
+            rlTexCoord2f(t0.x,t0.y); rlVertex2f(p0.x,p0.y);
+            rlTexCoord2f(t1.x,t1.y); rlVertex2f(p1.x,p1.y);
+            rlTexCoord2f(t2.x,t2.y); rlVertex2f(p2.x,p2.y);
+            rlEnd(); rlSetTexture(0);
+        };
+        const Color sideL{180,180,180,255},sideR{215,215,215,255};
+        // Top diamond is two textured triangles; the two visible sides use the same atlas tile with directional shading.
+        tri(a,b,c,{(u0+u1)*0.5f,v0},{u0,(v0+v1)*0.5f},{(u0+u1)*0.5f,(v0+v1)*0.5f},WHITE);
+        tri(a,c,d,{(u0+u1)*0.5f,v0},{(u0+u1)*0.5f,(v0+v1)*0.5f},{u1,(v0+v1)*0.5f},WHITE);
+        tri(b,e,c,{u0,v0},{(u0+u1)*0.5f,v1},{(u0+u1)*0.5f,(v0+v1)*0.5f},sideL);
+        tri(c,e,d,{(u0+u1)*0.5f,(v0+v1)*0.5f},{(u0+u1)*0.5f,v1},{u1,(v0+v1)*0.5f},sideR);
+    } else {
+        DrawTriangle(a,b,d,base); DrawTriangle(b,e,d,Fade(base,0.72f));
+    }
+    DrawLineEx(a,b,1.0f,Fade(BLACK,0.35f)); DrawLineEx(b,e,1.0f,Fade(BLACK,0.35f));
+    DrawLineEx(e,d,1.0f,Fade(BLACK,0.35f)); DrawLineEx(d,a,1.0f,Fade(BLACK,0.35f));
 }
 mc::world::BlockId wood_planks_for(mc::world::BlockId id) {
     using mc::world::BlockId;
@@ -1833,7 +1847,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const ItemStack& stack=inventory[i];
             DrawRectangle(barX+i*barW,barY,48,56,Fade(BLACK,0.72f));
             DrawRectangleLines(barX+i*barW,barY,48,56,i==selected?YELLOW:GRAY);
-            if(stack.count>0) draw_item_icon(stack.id,barX+i*barW+8,barY+9,32);
+            if(stack.count>0) draw_item_icon(stack.id,barX+i*barW+8,barY+9,32,blockTexture);
             DrawText(TextFormat("%i",i+1),barX+i*barW+3,barY+3,11,RAYWHITE);
             if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
@@ -1960,7 +1974,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawRectangle(sx,sy,48,50,Fade(BLACK,0.7f));
                 DrawRectangleLines(sx,sy,48,50,i==selected?YELLOW:GRAY);
                 if(inventory[i].count>0) {
-                    draw_item_icon(inventory[i].id,sx+7,sy+5,34);
+                    draw_item_icon(inventory[i].id,sx+7,sy+5,34,blockTexture);
                     DrawText(TextFormat("%i",inventory[i].count),sx+27,sy+34,12,RAYWHITE);
                 }
             }
