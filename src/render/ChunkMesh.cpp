@@ -73,11 +73,21 @@ int sign_of(const std::array<float,3>& edge,int axis) {
 using Mask=std::array<std::uint16_t,256>;
 }
 
+bool ChunkMeshData::is_current(const mc::world::World& world,int cx,int cz) const {
+    return source_revision==world.chunk_revision(cx,cz) &&
+           neighbor_revisions[0]==world.chunk_revision(cx-1,cz) &&
+           neighbor_revisions[1]==world.chunk_revision(cx+1,cz) &&
+           neighbor_revisions[2]==world.chunk_revision(cx,cz-1) &&
+           neighbor_revisions[3]==world.chunk_revision(cx,cz+1);
+}
+
 ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int cz,int sectionY) {
     ChunkMeshData out;
     const auto* chunk=world.find_chunk(cx,cz);
     if(!chunk || sectionY<0 || sectionY>=mc::world::Chunk::Height/SectionHeight) return out;
     out.source_revision=chunk->revision();
+    out.neighbor_revisions={world.chunk_revision(cx-1,cz),world.chunk_revision(cx+1,cz),
+                            world.chunk_revision(cx,cz-1),world.chunk_revision(cx,cz+1)};
     out.vertices.reserve(4096);
     out.indices.reserve(6144);
     const int baseX=cx*mc::world::Chunk::Width;
