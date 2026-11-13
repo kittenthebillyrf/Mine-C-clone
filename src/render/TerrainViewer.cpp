@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <fstream>
 #include <string>
+#include <deque>
 
 namespace mc::render {
 namespace {
@@ -82,12 +83,20 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     const int size=std::clamp(map_size,256,4096);
     World world;
     const generation::ChunkGenerator generator(seed);
+    std::deque<ChunkPos> pendingChunks;
     { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
+    const int spawnChunkX=(size/2)/Chunk::Width, spawnChunkZ=(size/2)/Chunk::Depth;
+    if(world.find_chunk(spawnChunkX,spawnChunkZ)==nullptr)
+        generator.generate_chunk(world,spawnChunkX,spawnChunkZ);
     const auto ensure_chunks = [&](int world_x,int world_z) {
         const int centerX=world_x/Chunk::Width, centerZ=world_z/Chunk::Depth;
         for(int cz=std::max(0,centerZ-2);cz<=std::min((size-1)/Chunk::Depth,centerZ+2);++cz)
-            for(int cx=std::max(0,centerX-2);cx<=std::min((size-1)/Chunk::Width,centerX+2);++cx)
-                if(world.find_chunk(cx,cz)==nullptr) generator.generate_chunk(world,cx,cz);
+            for(int cx=std::max(0,centerX-2);cx<=std::min((size-1)/Chunk::Width,centerX+2);++cx) {
+                if(world.find_chunk(cx,cz)!=nullptr) continue;
+                const bool queued=std::any_of(pendingChunks.begin(),pendingChunks.end(),
+                    [&](const ChunkPos& p){ return p.x==cx&&p.z==cz; });
+                if(!queued) pendingChunks.push_back(ChunkPos{cx,cz});
+            }
     };
     ensure_chunks(size/2,size/2);
 
@@ -115,6 +124,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     while(!WindowShouldClose()) {
         const float dt=std::min(GetFrameTime(),0.04f);
         ensure_chunks(int(px),int(pz));
+        if(!pendingChunks.empty()) {
+            const ChunkPos next=pendingChunks.front();
+            pendingChunks.pop_front();
+            if(world.find_chunk(next.x,next.z)==nullptr)
+                generator.generate_chunk(world,next.x,next.z);
+        }
         if(inMenu) {
             menuYaw+=dt*0.055f;
             Camera3D menuCamera{};
