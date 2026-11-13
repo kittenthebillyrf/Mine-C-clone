@@ -1638,7 +1638,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 // Most special blocks are clustered into a few vertical sections.
                 // Test each section against the camera once, not once per block.
                 std::array<bool,mc::world::Chunk::Height/ChunkMeshBuilder::SectionHeight> visibleSections{};
-                for(int section=firstSection;section<=lastSection;++section)
+                const int specialFirstSection=std::max(0,minY/ChunkMeshBuilder::SectionHeight);
+                const int specialLastSection=std::min(
+                    int(visibleSections.size())-1,maxY/ChunkMeshBuilder::SectionHeight);
+                for(int section=specialFirstSection;section<=specialLastSection;++section)
                     visibleSections[std::size_t(section)]=section_in_frustum(
                         camera,cx,cz,section,GetScreenWidth(),GetScreenHeight());
                 const auto local_or_world=[&](int bx,int by,int bz) {
