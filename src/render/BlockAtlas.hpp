@@ -102,4 +102,3 @@ inline void unload_block_atlas(BlockAtlasAssets& assets) {
     if (assets.texture.id != 0) UnloadTexture(assets.texture);
 }
 }
-}
