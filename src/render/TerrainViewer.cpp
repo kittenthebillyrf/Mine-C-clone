@@ -5,6 +5,7 @@
 #include "../world/WorldGen112.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -691,6 +692,19 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
+bool replace_saved_file(const std::string& temporary,const std::string& destination) {
+    const std::string backup=destination+".bak";
+    std::remove(backup.c_str());
+    errno=0;
+    const bool hadPrevious=(std::rename(destination.c_str(),backup.c_str())==0);
+    if(!hadPrevious && errno!=ENOENT) return false;
+    if(std::rename(temporary.c_str(),destination.c_str())!=0) {
+        if(hadPrevious) std::rename(backup.c_str(),destination.c_str());
+        return false;
+    }
+    if(hadPrevious) std::remove(backup.c_str());
+    return true;
+}
 bool save_world_file(const mc::world::World& world,
                      double px,double py,double pz,double motionX,double motionY,double motionZ,
                      float yaw,float pitch,const ItemStack* inventory,int selected) {
@@ -717,10 +731,8 @@ bool save_world_file(const mc::world::World& world,
         output.flush();
         if(!output) return false;
     }
-    std::remove("world.mcc");
-    if(std::rename(worldTemp.c_str(),"world.mcc")!=0) return false;
-    std::remove("world.mcc.player");
-    if(std::rename(playerTemp.c_str(),"world.mcc.player")!=0) return false;
+    if(!replace_saved_file(worldTemp,"world.mcc")) return false;
+    if(!replace_saved_file(playerTemp,"world.mcc.player")) return false;
     return true;
 }
 bool load_player_state(double& px,double& py,double& pz,
@@ -838,6 +850,21 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     // Restore the complete local player session when a matching custom save
     // exists. Missing/invalid metadata leaves a fresh spawn and starter bar.
     load_player_state(px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
+    // Never resume inside terrain, even if a save was made just before a
+    // falling block landed or the world was edited around the player.
+    if(!collision_boxes(world,player_box(px,py,pz)).empty()) {
+        bool recovered=false;
+        for(double lift=0.05;lift<=16.0001;lift+=0.05) {
+            if(collision_boxes(world,player_box(px,py+lift,pz)).empty()) {
+                py+=lift; recovered=true; break;
+            }
+        }
+        if(!recovered) {
+            px=double(size)*0.5; pz=double(size)*0.5;
+            py=double(surface_y(world,int(px),int(pz)));
+            motionX=motionY=motionZ=0.0;
+        }
+    }
     bool inventoryOpen=false;
     bool creativeOpen=false;
     bool paused=false;
