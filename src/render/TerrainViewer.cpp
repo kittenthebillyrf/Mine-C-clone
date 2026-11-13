@@ -1577,21 +1577,25 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
             const float renderRadiusSq=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
-            // Build nearest chunks first so the playable area appears before
-            // distant scenery when the per-frame mesh budget is exhausted.
-            std::vector<std::tuple<float,int,int>> orderedChunks;
-            orderedChunks.reserve(std::size_t(lastChunkX-firstChunkX+1)*std::size_t(lastChunkZ-firstChunkZ+1));
+            // Reuse the candidate buffer: allocating and freeing this vector every
+            // frame creates avoidable allocator traffic while the camera moves.
+            struct ChunkCandidate { float distanceSq; int x; int z; };
+            static std::vector<ChunkCandidate> orderedChunks;
+            orderedChunks.clear();
+            const std::size_t candidateCapacity=
+                std::size_t(lastChunkX-firstChunkX+1)*std::size_t(lastChunkZ-firstChunkZ+1);
+            if(orderedChunks.capacity()<candidateCapacity) orderedChunks.reserve(candidateCapacity);
             for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx) {
                 if(!world.find_chunk(cx,cz)) continue;
                 const float dx=float(cx*Chunk::Width+8)-float(px);
                 const float dz=float(cz*Chunk::Depth+8)-float(pz);
                 const float distanceSq=dx*dx+dz*dz;
-                if(distanceSq<=renderRadiusSq) orderedChunks.emplace_back(distanceSq,cx,cz);
+                if(distanceSq<=renderRadiusSq) orderedChunks.push_back(ChunkCandidate{distanceSq,cx,cz});
             }
             std::sort(orderedChunks.begin(),orderedChunks.end(),
-                [](const auto& a,const auto& b){return std::get<0>(a)<std::get<0>(b);});
+                [](const ChunkCandidate& a,const ChunkCandidate& b){return a.distanceSq<b.distanceSq;});
             for(const auto& candidate:orderedChunks) {
-                const int cx=std::get<1>(candidate),cz=std::get<2>(candidate);
+                const int cx=candidate.x,cz=candidate.z;
                 for(int section=firstSection;section<=lastSection;++section) {
                     if(!section_in_frustum(camera,cx,cz,section,GetScreenWidth(),GetScreenHeight())) continue;
                     const auto key=runtime_mesh_key(cx,cz,section);
@@ -1631,17 +1635,33 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(dx*dx+dz*dz>specialRadiusSq) continue;
                 const auto* chunk=world.find_chunk(cx,cz);
                 if(!chunk) continue;
+                // Most special blocks are clustered into a few vertical sections.
+                // Test each section against the camera once, not once per block.
+                std::array<bool,mc::world::Chunk::Height/ChunkMeshBuilder::SectionHeight> visibleSections{};
+                for(int section=firstSection;section<=lastSection;++section)
+                    visibleSections[std::size_t(section)]=section_in_frustum(
+                        camera,cx,cz,section,GetScreenWidth(),GetScreenHeight());
+                const auto local_or_world=[&](int bx,int by,int bz) {
+                    if(bx>=0&&bx<mc::world::Chunk::Width&&by>=0&&by<mc::world::Chunk::Height&&
+                       bz>=0&&bz<mc::world::Chunk::Depth)
+                        return chunk->get_unchecked(bx,by,bz);
+                    return world.get_block(cx*Chunk::Width+bx,by,cz*Chunk::Depth+bz);
+                };
                 for(const std::size_t index:chunk->special_blocks()) {
                     const int bx=int(index%Chunk::Width);
                     const int bz=int((index/Chunk::Width)%Chunk::Depth);
                     const int by=int(index/(Chunk::Width*Chunk::Depth));
                     const int x=cx*Chunk::Width+bx,z=cz*Chunk::Depth+bz;
                     if(by<minY||by>maxY||x<minX||x>=maxX||z<minZ||z>=maxZ) continue;
-                    const BlockId id=chunk->get(bx,by,bz);
+                    if(!visibleSections[std::size_t(by/ChunkMeshBuilder::SectionHeight)]) continue;
+                    const BlockId id=chunk->get_unchecked(bx,by,bz);
                     if(id==BlockId::Air||is_chunk_mesh_block(id)) continue;
-                    if(world.get_block(x,by+1,z)!=BlockId::Air && world.get_block(x,by+1,z)!=BlockId::Water &&
-                       world.get_block(x+1,by,z)!=BlockId::Air && world.get_block(x-1,by,z)!=BlockId::Air &&
-                       world.get_block(x,by,z+1)!=BlockId::Air && world.get_block(x,by,z-1)!=BlockId::Air) continue;
+                    const BlockId above=local_or_world(bx,by+1,bz);
+                    if(above!=BlockId::Air && above!=BlockId::Water &&
+                       local_or_world(bx+1,by,bz)!=BlockId::Air &&
+                       local_or_world(bx-1,by,bz)!=BlockId::Air &&
+                       local_or_world(bx,by,bz+1)!=BlockId::Air &&
+                       local_or_world(bx,by,bz-1)!=BlockId::Air) continue;
                     draw_block(blockModels,world,id,x,by,z,block_center(x,by,z));
                 }
             }
