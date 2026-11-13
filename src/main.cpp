@@ -68,9 +68,17 @@ bool run_world_self_test() {
         if(info.id!=id || info.name.empty() || !info.solid) return false;
     }
     if(!world.set_block(4,12,4,mc::world::BlockId::DarkOakStairs)) return false;
-    const mc::world::BlockState stairState{1,0,0,0};
+    const mc::world::BlockState stairState{1,1,0,0};
     if(!world.set_block_state(4,12,4,stairState)) return false;
-    if(!world.get_block_state(4,12,4) || world.get_block_state(4,12,4)->facing!=1) return false;
+    if(!world.get_block_state(4,12,4) || world.get_block_state(4,12,4)->facing!=1 ||
+       world.get_block_state(4,12,4)->shape!=1) return false;
+    // Cover all four horizontal stair facings and both vertical halves.
+    for(std::uint8_t facing=0;facing<4;++facing) {
+        const int x=5+int(facing);
+        if(!world.set_block(x,12,4,mc::world::BlockId::OakStairs) ||
+           !world.set_block_state(x,12,4,mc::world::BlockState{facing,static_cast<std::uint8_t>(facing&1u),0,0}))
+            return false;
+    }
     // Falling-block simulation: sand and gravel descend one cell per tick,
     // replace liquids, and stop on a solid support.
     if(!world.set_block(2,0,2,mc::world::BlockId::Stone) ||
@@ -95,7 +103,11 @@ bool run_world_self_test() {
        restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass ||
        restored.get_block(4,12,4)!=mc::world::BlockId::DarkOakStairs) return false;
     const auto* restoredStair=restored.get_block_state(4,12,4);
-    if(!restoredStair || restoredStair->facing!=1 || restoredStair->shape!=0) return false;
+    if(!restoredStair || restoredStair->facing!=1 || restoredStair->shape!=1) return false;
+    for(std::uint8_t facing=0;facing<4;++facing) {
+        const auto* state=restored.get_block_state(5+int(facing),12,4);
+        if(!state || state->facing!=facing || state->shape!=(facing&1u)) return false;
+    }
     if(!restored.set_block(4,12,4,mc::world::BlockId::Air) ||
        restored.get_block_state(4,12,4)!=nullptr) return false;
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
