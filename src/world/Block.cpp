@@ -102,7 +102,8 @@ const BlockInfo& block_info(BlockId id) {
         {BlockId::GreenConcrete,"green_concrete",true},
         {BlockId::RedConcrete,"red_concrete",true},
         {BlockId::BlackConcrete,"black_concrete",true},
-        {BlockId::Torch,"torch",false}
+        {BlockId::Torch,"torch",false},
+        {BlockId::OakStairs,"oak_stairs",true}
     }};
     const auto raw=static_cast<std::uint16_t>(id);
     return blocks[raw<blocks.size()?raw:0];
