@@ -65,7 +65,7 @@ bool World::load(std::istream& input) {
     input.read(header,sizeof(header));
     if(!input||!std::equal(std::begin(header),std::end(header),std::begin(magic))) return false;
     std::uint32_t version=0,count=0;
-    if(!read_u32(input,version)||version!=1u||!read_u32(input,count)||count>4096u) return false;
+    if(!read_u32(input,version)||version!=1u||!read_u32(input,count)||count>65536u) return false;
     std::unordered_map<ChunkPos,Chunk,ChunkPosHash> loaded;
     for(std::uint32_t n=0;n<count;++n) {
         std::uint32_t rawX=0,rawZ=0;
