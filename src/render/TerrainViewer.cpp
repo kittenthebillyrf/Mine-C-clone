@@ -189,6 +189,39 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
 }
 Vector3 block_center(int x,int y,int z) { return Vector3{(float(x)+0.5f)*BLOCK,(float(y)+0.5f)*BLOCK,(float(z)+0.5f)*BLOCK}; }
+bool is_solid(mc::world::BlockId id) {
+    return id!=mc::world::BlockId::Air && mc::world::block_info(id).solid;
+}
+bool player_collides(const mc::world::World& world,float x,float feetY,float z) {
+    constexpr float radius=0.30f;
+    constexpr float height=PLAYER_HEIGHT;
+    const int minX=int(std::floor(x-radius));
+    const int maxX=int(std::floor(x+radius));
+    const int minZ=int(std::floor(z-radius));
+    const int maxZ=int(std::floor(z+radius));
+    const int minY=int(std::floor(feetY/BLOCK));
+    const int maxY=int(std::floor((feetY+height-0.001f)/BLOCK));
+    for(int by=minY;by<=maxY;++by)
+        for(int bz=minZ;bz<=maxZ;++bz)
+            for(int bx=minX;bx<=maxX;++bx)
+                if(is_solid(world.get_block(bx,by,bz))) return true;
+    return false;
+}
+float player_ground_height(const mc::world::World& world,float x,float z) {
+    constexpr float radius=0.28f;
+    float highest=0.0f;
+    const int xs[2]={int(std::floor(x-radius)),int(std::floor(x+radius))};
+    const int zs[2]={int(std::floor(z-radius)),int(std::floor(z+radius))};
+    for(int bx:xs) for(int bz:zs) {
+        for(int by=mc::world::Chunk::Height-1;by>=0;--by) {
+            if(is_solid(world.get_block(bx,by,bz))) {
+                highest=std::max(highest,float(by+1)*BLOCK);
+                break;
+            }
+        }
+    }
+    return highest;
+}
 int surface_y(const mc::world::World& world,int x,int z) {
     for(int y=mc::world::Chunk::Height-1;y>=0;--y) {
         const auto id=world.get_block(x,y,z);
@@ -248,7 +281,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(const BlockId id:texturedBlocks) blockModels[static_cast<unsigned int>(id)]=make_block_model(id);
     float px=float(size)*0.5f,pz=float(size)*0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
-    float vy=0.0f,yaw=0.0f,pitch=-0.18f;
+    float vx=0.0f,vz=0.0f,vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
     int selected=0;
     int creativePage=0;
@@ -389,21 +422,56 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float len=std::sqrt(mx*mx+mz*mz);
         if(len>0) { mx/=len; mz/=len; }
         const bool crouching=IsKeyDown(KEY_LEFT_SHIFT);
-        const float speed=crouching?2.5f:6.0f;
-        const float nx=std::clamp(px+mx*speed*dt,1.0f,float(size-2));
-        const float nz=std::clamp(pz+mz*speed*dt,1.0f,float(size-2));
-        const int groundX=int(std::floor(nx)),groundZ=int(std::floor(nz));
-        const float ground=float(surface_y(world,groundX,groundZ))*BLOCK;
-        if(ground<=py+BLOCK*1.1f || !grounded) { px=nx; pz=nz; }
-        if(captured && grounded && (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) { vy=10.5f; grounded=false; }
-        vy-=25.0f*dt; py+=vy*dt;
-        const float floorY=float(surface_y(world,int(px),int(pz)))*BLOCK;
-        if(py<=floorY) { py=floorY; vy=0; grounded=true; }
+        const bool sprinting=!crouching && (IsKeyDown(KEY_LEFT_CONTROL) ||
+            (gamepad&&IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB)));
+        // Java-like horizontal acceleration, air control and ground friction.
+        const float maxSpeed=crouching?1.30f:(sprinting?5.60f:4.30f);
+        const float accel=grounded?28.0f:8.0f;
+        const float friction=grounded?12.0f:1.5f;
+        const float targetVX=mx*maxSpeed,targetVZ=mz*maxSpeed;
+        if(len>0.001f) {
+            vx+=std::clamp(targetVX-vx,-accel*dt,accel*dt);
+            vz+=std::clamp(targetVZ-vz,-accel*dt,accel*dt);
+        } else {
+            const float damp=std::max(0.0f,1.0f-friction*dt);
+            vx*=damp; vz*=damp;
+        }
+        const float nextX=std::clamp(px+vx*dt,0.35f,float(size)-0.35f);
+        if(!player_collides(world,nextX,py,pz)) px=nextX;
+        else {
+            const float stepY=py+BLOCK*0.60f;
+            if(grounded && !player_collides(world,nextX,stepY,pz)) { px=nextX; py=stepY; }
+            else vx=0.0f;
+        }
+        const float nextZ=std::clamp(pz+vz*dt,0.35f,float(size)-0.35f);
+        if(!player_collides(world,px,py,nextZ)) pz=nextZ;
+        else {
+            const float stepY=py+BLOCK*0.60f;
+            if(grounded && !player_collides(world,px,stepY,nextZ)) { pz=nextZ; py=stepY; }
+            else vz=0.0f;
+        }
+        if(captured && grounded && (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) {
+            vy=10.0f; grounded=false;
+        }
+        // Gravity and vertical collision resolution use the player's full AABB.
+        vy-=32.0f*dt;
+        const float nextY=py+vy*dt;
+        if(vy<=0.0f) {
+            const float floorY=player_ground_height(world,px,pz);
+            if(nextY<=floorY) { py=floorY; vy=0.0f; grounded=true; }
+            else if(!player_collides(world,px,nextY,pz)) { py=nextY; grounded=false; }
+            else { vy=0.0f; grounded=true; }
+        } else if(!player_collides(world,px,nextY,pz)) {
+            py=nextY; grounded=false;
+        } else {
+            vy=0.0f;
+        }
 
         if(captured) {
             for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
             const float wheel=GetMouseWheelMove();
-            if(wheel!=0) selected=(selected+(wheel>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+            if(wheel>0.0f) selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
+            else if(wheel<0.0f) selected=(selected+1)%HOTBAR_SIZE;
             if(gamepad) {
                 // L1/R1 cycle the hotbar; analog L2/R2 are reserved for block actions.
                 if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1))
@@ -477,7 +545,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / B | Break: ZR | Place: ZL | Hotbar: L/R | A: inventory | X: creative | +: pause",14,GetScreenHeight()-28,13,RAYWHITE);
+        DrawText("Move: WASD / left stick | Sprint: CTRL / L-stick | Crouch: SHIFT | Jump: SPACE / B | Hotbar: 9 slots, one step per wheel/L/R",14,GetScreenHeight()-28,13,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
