@@ -362,13 +362,6 @@ Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
         mesh.colors[i*4+1]=vertex.light;
         mesh.colors[i*4+2]=vertex.light;
         mesh.colors[i*4+3]=255;
-        const Vector2 uv=(std::abs(vertex.nx)>0.5f)
-            ?Vector2{vertex.z,vertex.y}
-            :(std::abs(vertex.ny)>0.5f?Vector2{vertex.x,vertex.z}:Vector2{vertex.x,vertex.y});
-        const Vector2 base=(std::abs(vertex.nx)>0.5f)
-            ?Vector2{tiled[i].z,tiled[i].y}
-            :(std::abs(vertex.ny)>0.5f?Vector2{tiled[i].x,tiled[i].z}:Vector2{tiled[i].x,tiled[i].y});
-        (void)base;
         // Each emitted quad spans exactly one block, so its UVs are derived
         // from its local corner coordinates rather than the full greedy quad.
         const std::size_t corner=i%4;
@@ -1581,7 +1574,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=std::max(minZ,maxZ-1)/Chunk::Depth;
             const int firstSection=minY/ChunkMeshBuilder::SectionHeight;
             const int lastSection=maxY/ChunkMeshBuilder::SectionHeight;
-            for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx)
+            const float renderRadiusSq=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
+            for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx) {
+                const float dx=(float(cx*Chunk::Width+8)-float(px));
+                const float dz=(float(cz*Chunk::Depth+8)-float(pz));
+                if(dx*dx+dz*dz>renderRadiusSq) continue;
                 for(int section=firstSection;section<=lastSection;++section) {
                     if(!section_in_frustum(camera,cx,cz,section,GetScreenWidth(),GetScreenHeight())) continue;
                     const auto key=runtime_mesh_key(cx,cz,section);
@@ -1603,6 +1600,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     }
                     if(cached.model.meshCount>0) DrawModel(cached.model,Vector3{0,0,0},1.0f,WHITE);
                 }
+            }
         }
         for(const auto& dropped:droppedItems)
             DrawCube(Vector3{dropped.x*BLOCK,(dropped.y+0.15f)*BLOCK,dropped.z*BLOCK},
@@ -1613,7 +1611,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(blockTexture.id!=0) {
             const int firstChunkX=minX/Chunk::Width,lastChunkX=std::max(minX,maxX-1)/Chunk::Width;
             const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=std::max(minZ,maxZ-1)/Chunk::Depth;
+            const float specialRadiusSq=float(renderRadiusBlocks+Chunk::Width)*float(renderRadiusBlocks+Chunk::Width);
             for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx) {
+                const float dx=(float(cx*Chunk::Width+8)-float(px));
+                const float dz=(float(cz*Chunk::Depth+8)-float(pz));
+                if(dx*dx+dz*dz>specialRadiusSq) continue;
                 const auto* chunk=world.find_chunk(cx,cz);
                 if(!chunk) continue;
                 for(const std::size_t index:chunk->special_blocks()) {
