@@ -1,6 +1,8 @@
 #include "i18n/Localization.hpp"
 #include "world/World.hpp"
 #include "world/WorldGen112.hpp"
+#include "physics/PlayerPhysics.hpp"
+
 #include "render/TerrainViewer.hpp"
 #include "render/ChunkMesh.hpp"
 #include "assets/Json.hpp"
@@ -166,6 +168,33 @@ bool run_world_self_test() {
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
 }
 
+bool run_player_physics_self_test() {
+    using mc::world::BlockId;
+    mc::world::World w;
+    // Full-cube wall: a large horizontal request cannot tunnel through it.
+    for(int y=0;y<4;++y)for(int z=-1;z<=1;++z)
+        if(!w.set_block(2,y,z,BlockId::Stone))return false;
+    double x=1.0,y=1.0,z=0.0,dx=4.0,dy=0.0,dz=0.0;
+    bool ch=false,cv=false,ground=false;
+    if(!mc::physics::move_player(w,x,y,z,dx,dy,dz,false,false,ch,cv,ground))return false;
+    if(!ch||x>1.700001||!mc::physics::player_box_clear(w,x,y,z))return false;
+    // Floor prevents downward motion and reports grounded contact.
+    mc::world::World floorWorld;
+    for(int bx=-2;bx<=2;++bx)for(int bz=-2;bz<=2;++bz)
+        if(!floorWorld.set_block(bx,0,bz,BlockId::Stone))return false;
+    x=0.5;y=1.0;z=0.5;dx=0;dy=-0.5;dz=0;
+    if(!mc::physics::move_player(floorWorld,x,y,z,dx,dy,dz,false,false,ch,cv,ground))return false;
+    if(!cv||!ground||std::abs(y-1.0)>1e-6)return false;
+    // Slab and fence shapes must remain solid collision obstacles.
+    if(!floorWorld.set_block(2,1,0,BlockId::OakSlab)||
+       !floorWorld.set_block(4,1,0,BlockId::OakFence))return false;
+    if(mc::physics::player_box_clear(floorWorld,2.5,1.1,0.5)||
+       mc::physics::player_box_clear(floorWorld,4.5,1.1,0.5))return false;
+    // Stair state changes its collision half, but never permits penetration.
+    if(!floorWorld.set_block(6,1,0,BlockId::OakStairs)||
+       !floorWorld.set_block_state(6,1,0,mc::world::BlockState{0,0,0,0}))return false;
+    return !mc::physics::player_box_clear(floorWorld,6.5,1.1,0.5);
+}
 bool run_chunk_mesh_self_test() {
     mc::world::World world;
     for(int y=0;y<mc::render::ChunkMeshBuilder::SectionHeight;++y)
