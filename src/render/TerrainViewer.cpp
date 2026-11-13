@@ -24,8 +24,30 @@ constexpr float REACH=16.0f; // 8 blocks at the current 2-unit block scale.
 constexpr float MAX_PITCH=1.52f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
-constexpr std::size_t MAX_RESIDENT_CHUNKS=100;
 constexpr int KEEP_CHUNK_RADIUS=3;
+struct DeviceProfile {
+    const char* label;
+    int recommendedChunks;
+    int maxChunks;
+    int targetFps;
+    std::size_t maxResidentChunks;
+    int verticalRadius;
+};
+DeviceProfile detect_device_profile() {
+#if defined(__SWITCH__)
+    return {"Nintendo Switch",2,6,60,72,12};
+#elif defined(__vita__)
+    return {"PlayStation Vita",2,4,30,40,10};
+#elif defined(_WIN32)
+    return {"Windows PC",8,12,120,192,20};
+#elif defined(__APPLE__)
+    return {"macOS",8,12,120,192,20};
+#elif defined(__linux__)
+    return {"Linux PC",8,12,120,192,20};
+#else
+    return {"Desktop / compatible device",4,8,60,96,16};
+#endif
+}
 
 // Platform-aware Nintendo Switch / standard gamepad face-button layout.
 bool button_a(int pad=0) {
@@ -235,6 +257,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     std::deque<ChunkPos> pendingChunks;
     std::deque<ChunkPos> residentOrder;
     std::vector<BreakParticle> breakParticles;
+    const DeviceProfile deviceProfile=detect_device_profile();
+    int renderDistanceChunks=deviceProfile.recommendedChunks;
     { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
     const int spawnChunkX=(size/2)/Chunk::Width, spawnChunkZ=(size/2)/Chunk::Depth;
     if(world.find_chunk(spawnChunkX,spawnChunkZ)==nullptr) {
@@ -244,8 +268,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     for(const ChunkPos& pos:world.chunk_positions()) residentOrder.push_back(pos);
     const auto ensure_chunks = [&](int world_x,int world_z) {
         const int centerX=world_x/Chunk::Width, centerZ=world_z/Chunk::Depth;
-        for(int cz=std::max(0,centerZ-2);cz<=std::min((size-1)/Chunk::Depth,centerZ+2);++cz)
-            for(int cx=std::max(0,centerX-2);cx<=std::min((size-1)/Chunk::Width,centerX+2);++cx) {
+        for(int cz=std::max(0,centerZ-renderDistanceChunks);cz<=std::min((size-1)/Chunk::Depth,centerZ+renderDistanceChunks);++cz)
+            for(int cx=std::max(0,centerX-renderDistanceChunks);cx<=std::min((size-1)/Chunk::Width,centerX+renderDistanceChunks);++cx) {
                 if(world.find_chunk(cx,cz)!=nullptr) continue;
                 const bool queued=std::any_of(pendingChunks.begin(),pendingChunks.end(),
                     [&](const ChunkPos& p){ return p.x==cx&&p.z==cz; });
@@ -256,17 +280,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
     InitWindow(1280,720,"Mine C++ Clone");
     BlockAtlasAssets& blockAtlas = load_block_atlas();
-#ifdef __SWITCH__
-    SetTargetFPS(60);
-    int renderRadius=8;
-    constexpr int verticalRadius=12;
-    constexpr int menuRadius=12;
-#else
-    SetTargetFPS(120);
-    int renderRadius=14;
-    constexpr int verticalRadius=20;
-    constexpr int menuRadius=17;
-#endif
+    SetTargetFPS(deviceProfile.targetFps);
+    const int verticalRadius=deviceProfile.verticalRadius;
+    const int menuRadius=(deviceProfile.targetFps<=60)?12:17;
     DisableCursor();
     float px=float(size)*0.5f+0.5f,pz=float(size)*0.5f+0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
@@ -280,27 +296,14 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
     for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
     bool inventoryOpen=false;
+    bool craftingOpen=false;
     bool creativeOpen=false;
     bool paused=false;
     bool pauseOptionsOpen=false;
     int pauseSelection=0;
     float cameraFov=70.0f;
-#ifdef __SWITCH__
-    const char* detectedDevice="Nintendo Switch";
-    const int recommendedRenderDistance=8;
-#else
-#ifdef _WIN32
-    const char* detectedDevice="Windows PC";
-#else
-#ifdef __APPLE__
-    const char* detectedDevice="Apple device";
-#else
-    const char* detectedDevice="Desktop / Linux";
-#endif
-#endif
-    const int recommendedRenderDistance=14;
-#endif
     bool showDeviceProfile=true;
+    float hotbarChangeCooldown=0.0f;
     bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
@@ -324,7 +327,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         // Bound RAM while retaining a safety ring around the active player.
         std::size_t evictionAttempts=residentOrder.size();
-        while(world.chunk_count()>MAX_RESIDENT_CHUNKS && !residentOrder.empty() && evictionAttempts-->0) {
+        while(world.chunk_count()>deviceProfile.maxResidentChunks && !residentOrder.empty() && evictionAttempts-->0) {
             const ChunkPos candidate=residentOrder.front();
             residentOrder.pop_front();
             const int centerX=int(px)/Chunk::Width,centerZ=int(pz)/Chunk::Depth;
@@ -349,11 +352,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         if(inMenu) {
             menuYaw+=dt*0.055f;
-            if(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP)))
+            if(!showDeviceProfile&&(IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP))))
                 menuSelection=(menuSelection+3)%4;
-            if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)))
+            if(!showDeviceProfile&&(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN))))
                 menuSelection=(menuSelection+1)%4;
-            const bool menuActivate=IsKeyPressed(KEY_ENTER)||(gamepad&&button_a());
+            const bool menuActivate=!showDeviceProfile&&(IsKeyPressed(KEY_ENTER)||(gamepad&&button_a()));
             Camera3D menuCamera{};
             const float cx=float(size)*BLOCK*0.5f, cz=float(size)*BLOCK*0.5f;
             menuCamera.position=Vector3{cx+std::sin(menuYaw)*48.0f,34.0f,cz+std::cos(menuYaw)*48.0f};
@@ -387,7 +390,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             for(int i=0;i<count;++i) {
                 const int y=by+i*(bh+gap);
                 const Rectangle rect{float(bx),float(y),float(bw),float(bh)};
-                const bool hover=CheckCollisionPointRec(mouse,rect);
+                const bool hover=!showDeviceProfile&&CheckCollisionPointRec(mouse,rect);
                 if(hover) menuSelection=i;
                 const bool active=(optionsOpen||multiplayerOpen)||menuSelection==i;
                 DrawRectangleRec(rect,active?Color{25,25,25,245}:Color{75,75,75,225});
@@ -411,6 +414,37 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawText(TextFormat("Recommended render distance: %i chunks",recommendedRenderDistance),GetScreenWidth()/2-190,by+bh+44,15,RAYWHITE);
                 DrawText("Apply the recommended profile in this menu",GetScreenWidth()/2-175,by+bh+68,15,LIGHTGRAY);
             }
+            if(showDeviceProfile) {
+                const int sw=GetScreenWidth(),sh=GetScreenHeight();
+                const int panelW=std::min(560,sw-32),panelH=250;
+                const int panelX=(sw-panelW)/2,panelY=(sh-panelH)/2;
+                DrawRectangle(0,0,sw,sh,Fade(BLACK,0.62f));
+                DrawRectangle(panelX,panelY,panelW,panelH,Color{30,30,34,250});
+                DrawRectangleLinesEx(Rectangle{float(panelX),float(panelY),float(panelW),float(panelH)},3,RAYWHITE);
+                DrawText("DEVICE DETECTED",panelX+22,panelY+16,25,YELLOW);
+                DrawText(deviceProfile.label,panelX+22,panelY+54,22,RAYWHITE);
+                DrawText(TextFormat("Recommended chunk distance: %d",deviceProfile.recommendedChunks),panelX+22,panelY+96,18,RAYWHITE);
+                DrawText(TextFormat("Target frame rate: %d FPS",deviceProfile.targetFps),panelX+22,panelY+124,18,RAYWHITE);
+                DrawText("Apply the recommended profile?",panelX+22,panelY+154,16,LIGHTGRAY);
+                const Rectangle applyRect{float(panelX+22),float(panelY+194),float((panelW-56)/2),40};
+                const Rectangle manualRect{float(panelX+34+(panelW-56)/2),float(panelY+194),float((panelW-56)/2),40};
+                const Vector2 promptMouse=GetMousePosition();
+                const bool applyHover=CheckCollisionPointRec(promptMouse,applyRect);
+                const bool manualHover=CheckCollisionPointRec(promptMouse,manualRect);
+                DrawRectangleRec(applyRect,applyHover?Color{48,105,48,255}:Color{34,80,34,255});
+                DrawRectangleLinesEx(applyRect,2,RAYWHITE);
+                DrawText("Apply / A",int(applyRect.x)+16,int(applyRect.y)+11,16,RAYWHITE);
+                DrawRectangleRec(manualRect,manualHover?Color{78,78,82,255}:Color{52,52,56,255});
+                DrawRectangleLinesEx(manualRect,2,RAYWHITE);
+                DrawText("Manual / B",int(manualRect.x)+16,int(manualRect.y)+11,16,RAYWHITE);
+                const bool applyProfile=(gamepad&&button_a())||IsKeyPressed(KEY_ENTER)||(applyHover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+                const bool keepManual=(gamepad&&button_b())||IsKeyPressed(KEY_ESCAPE)||(manualHover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+                if(applyProfile) {
+                    renderDistanceChunks=deviceProfile.recommendedChunks;
+                    SetTargetFPS(deviceProfile.targetFps);
+                    showDeviceProfile=false;
+                } else if(keepManual) showDeviceProfile=false;
+            }
             DrawText("Mine C++ Clone  |  Inspired by the Java 1.12 era",12,GetScreenHeight()-28,14,RAYWHITE);
             EndDrawing();
             if(requestQuit) break;
@@ -433,28 +467,23 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const Rectangle plus{float(cx+98),float(cy-55),52,44};
                 const Rectangle renderMinus{float(cx-150),float(cy+5),52,44};
                 const Rectangle renderPlus{float(cx+98),float(cy+5),52,44};
-                const int maxRenderDistance=
-#ifdef __SWITCH__
-                    12;
-#else
-                    32;
-#endif
+                const int maxRenderDistance=deviceProfile.maxChunks;
                 const Vector2 mouse=GetMousePosition();
                 if(back) { pauseOptionsOpen=false; pauseSelection=0; }
                 if(up) cameraFov=std::min(100.0f,cameraFov+2.0f);
                 if(down) cameraFov=std::max(50.0f,cameraFov-2.0f);
-                if(IsKeyPressed(KEY_RIGHT)) renderRadius=std::min(maxRenderDistance,renderRadius+1);
-                if(IsKeyPressed(KEY_LEFT)) renderRadius=std::max(2,renderRadius-1);
+                if(IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))) renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1);
+                if(IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))) renderDistanceChunks=std::max(1,renderDistanceChunks-1);
                 if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     if(CheckCollisionPointRec(mouse,minus)) cameraFov=std::max(50.0f,cameraFov-2.0f);
                     if(CheckCollisionPointRec(mouse,plus)) cameraFov=std::min(100.0f,cameraFov+2.0f);
-                    if(CheckCollisionPointRec(mouse,renderMinus)) renderRadius=std::max(2,renderRadius-1);
-                    if(CheckCollisionPointRec(mouse,renderPlus)) renderRadius=std::min(maxRenderDistance,renderRadius+1);
+                    if(CheckCollisionPointRec(mouse,renderMinus)) renderDistanceChunks=std::max(1,renderDistanceChunks-1);
+                    if(CheckCollisionPointRec(mouse,renderPlus)) renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1);
                     if(CheckCollisionPointRec(mouse,Rectangle{float(cx-150),float(cy+115),300,44})) { pauseOptionsOpen=false; pauseSelection=0; }
                 }
                 if(accept) { pauseOptionsOpen=false; pauseSelection=0; }
-                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)) renderRadius=std::max(2,renderRadius-1);
-                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) renderRadius=std::min(maxRenderDistance,renderRadius+1);
+                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)) renderDistanceChunks=std::max(1,renderDistanceChunks-1);
+                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1);
             } else {
                 if(up) pauseSelection=(pauseSelection+2)%3;
                 if(down) pauseSelection=(pauseSelection+1)%3;
@@ -480,14 +509,22 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 }
             }
         }
+        // X opens the inventory; Y opens the crafting panel.
         if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&button_x()))) {
-            inventoryOpen=!inventoryOpen; creativeOpen=false;
+            inventoryOpen=!inventoryOpen; craftingOpen=false; creativeOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        if(!paused && (IsKeyPressed(KEY_R)||(gamepad&&button_y()))) {
-            inventoryOpen=!inventoryOpen; creativeOpen=false;
-            captured=!inventoryOpen;
+        if(!paused && (IsKeyPressed(KEY_C)||(gamepad&&button_y()))) {
+            if(inventoryOpen&&craftingOpen) {
+                inventoryOpen=false; craftingOpen=false; captured=true; DisableCursor();
+            } else {
+                inventoryOpen=true; craftingOpen=true; creativeOpen=false; captured=false; EnableCursor();
+            }
+        }
+        if(!paused && IsKeyPressed(KEY_R)) {
+            creativeOpen=!creativeOpen; inventoryOpen=false; craftingOpen=false;
+            captured=!creativeOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
         if(!paused && (IsKeyPressed(KEY_F5)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_THUMB)))) {
@@ -591,16 +628,27 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         if(captured) {
             for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
+#ifndef __SWITCH__
+            // Read desktop mouse wheel once per detent; ignore noisy wheel reports.
             const float wheel=GetMouseWheelMove();
-            if(wheel!=0) selected=(selected+(wheel>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
-            if(gamepad) {
-                // L1/R1 cycle the hotbar; analog L2/R2 are reserved for block actions.
-                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1))
-                    selected=(selected+HOTBAR_SIZE-1)%HOTBAR_SIZE;
-                if(IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1))
-                    selected=(selected+1)%HOTBAR_SIZE;
+            if(hotbarChangeCooldown<=0.0f&&wheel!=0.0f) {
+                selected=(selected+(wheel>0?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+                hotbarChangeCooldown=0.14f;
+            }
+#endif
+            if(gamepad&&hotbarChangeCooldown<=0.0f) {
+                // Shoulder buttons and D-pad move one slot per press, never continuously.
+                const bool previous=IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)||
+                    IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT);
+                const bool next=IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)||
+                    IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT);
+                if(previous||next) {
+                    selected=(selected+(previous?HOTBAR_SIZE-1:1))%HOTBAR_SIZE;
+                    hotbarChangeCooldown=0.14f;
+                }
             }
         }
+        hotbarChangeCooldown=std::max(0.0f,hotbarChangeCooldown-dt);
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             const int panelW=760,panelH=380,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             const Vector2 mouse=GetMousePosition();
@@ -707,8 +755,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BeginDrawing();
         ClearBackground(Color{135,190,235,255});
         BeginMode3D(camera);
-        const int minX=std::max(0,int(px)-renderRadius),maxX=std::min(size,int(px)+renderRadius+1);
-        const int minZ=std::max(0,int(pz)-renderRadius),maxZ=std::min(size,int(pz)+renderRadius+1);
+        const int renderRadiusBlocks=renderDistanceChunks*Chunk::Width;
+        const int minX=std::max(0,int(px)-renderRadiusBlocks),maxX=std::min(size,int(px)+renderRadiusBlocks+1);
+        const int minZ=std::max(0,int(pz)-renderRadiusBlocks),maxZ=std::min(size,int(pz)+renderRadiusBlocks+1);
         std::vector<std::pair<BlockId,Vector3>> transparentBlocks;
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
             const int minY=std::max(0,int(py/BLOCK)-verticalRadius),maxY=std::min(Chunk::Height,int(py/BLOCK)+verticalRadius+2);
@@ -784,7 +833,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawRectangle(cx-150,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy-55,52,44,RAYWHITE); DrawText("-",cx-132,cy-51,30,RAYWHITE);
                 DrawRectangle(cx+98,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy-55,52,44,RAYWHITE); DrawText("+",cx+113,cy-51,30,RAYWHITE);
                 DrawText("FOV",cx-205,cy-42,18,LIGHTGRAY);
-                DrawText(TextFormat("Render distance: %i chunks",renderRadius),cx-145,cy+14,19,RAYWHITE);
+                DrawText(TextFormat("Render distance: %i chunks",renderDistanceChunks),cx-145,cy+14,19,RAYWHITE);
                 DrawRectangle(cx-150,cy+5,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy+5,52,44,RAYWHITE); DrawText("-",cx-132,cy+9,30,RAYWHITE);
                 DrawRectangle(cx+98,cy+5,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy+5,52,44,RAYWHITE); DrawText("+",cx+113,cy+9,30,RAYWHITE);
                 DrawText("LEFT / RIGHT or L1 / R1: render distance",cx-200,cy+58,15,LIGHTGRAY);
@@ -811,7 +860,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const int panelW=760,panelH=380,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             DrawRectangle(panelX,panelY,panelW,panelH,Fade(DARKGRAY,0.97f));
             DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
-            DrawText("INVENTORY",panelX+18,panelY+14,22,RAYWHITE);
+            DrawText(craftingOpen?"CRAFTING":"INVENTORY",panelX+18,panelY+14,22,RAYWHITE);
             DrawText("2x2 CRAFTING",panelX+540,panelY+48,18,YELLOW);
             for(int i=0;i<INVENTORY_SIZE;++i) {
                 const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
