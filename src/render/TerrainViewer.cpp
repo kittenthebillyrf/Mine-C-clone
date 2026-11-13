@@ -447,7 +447,7 @@ void tick_vanilla_player(const mc::world::World& world,double& px,double& py,dou
         collidedHorizontally=cH;
     } else if(lava) {
         const double oldY=py;
-        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYaw);
+        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYawDegrees);
         bool cH=false,cV=false;
         move_player_entity(world,px,py,pz,motionX,motionY,motionZ,sneaking,onGround,cH,cV,onGround);
         if(cH) motionX=motionZ=0.0;
