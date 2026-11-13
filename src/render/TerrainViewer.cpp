@@ -383,6 +383,72 @@ Model make_chunk_model(const ChunkMeshData& data,Texture2D texture) {
     if(model.materialCount>0) model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture=texture;
     return model;
 }
+
+// Water is translucent and must not be emitted as one DrawCube call per voxel.
+// Build exposed water faces into one mesh per chunk section instead.
+Model make_water_model(const mc::world::World& world,int cx,int cz,int section) {
+    using mc::world::BlockId;
+    const auto* chunk=world.find_chunk(cx,cz);
+    if(!chunk) return Model{};
+    static constexpr int face[6][3]={{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+    static constexpr float corners[6][4][3]={
+        {{1,0,0},{1,1,0},{1,1,1},{1,0,1}},
+        {{0,0,1},{0,1,1},{0,1,0},{0,0,0}},
+        {{0,1,1},{1,1,1},{1,1,0},{0,1,0}},
+        {{0,0,0},{1,0,0},{1,0,1},{0,0,1}},
+        {{1,0,1},{1,1,1},{0,1,1},{0,0,1}},
+        {{0,0,0},{0,1,0},{1,1,0},{1,0,0}}
+    };
+    std::vector<float> positions,normals,uvs;
+    std::vector<unsigned char> colors;
+    std::vector<unsigned short> indices;
+    const int y0=section*ChunkMeshBuilder::SectionHeight;
+    const int y1=y0+ChunkMeshBuilder::SectionHeight;
+    for(const std::size_t index:chunk->special_blocks()) {
+        const int x=int(index%mc::world::Chunk::Width);
+        const int z=int((index/mc::world::Chunk::Width)%mc::world::Chunk::Depth);
+        const int y=int(index/(mc::world::Chunk::Width*mc::world::Chunk::Depth));
+        if(y<y0||y>=y1||chunk->get_unchecked(x,y,z)!=BlockId::Water) continue;
+        const int wx=cx*mc::world::Chunk::Width+x,wz=cz*mc::world::Chunk::Depth+z;
+        for(int f=0;f<6;++f) {
+            const BlockId neighbor=world.get_block(wx+face[f][0],y+face[f][1],wz+face[f][2]);
+            if(neighbor==BlockId::Water || (neighbor!=BlockId::Air&&mc::world::block_info(neighbor).solid)) continue;
+            if(positions.size()/3u+4u>65532u) return Model{};
+            const unsigned short first=static_cast<unsigned short>(positions.size()/3u);
+            for(int c=0;c<4;++c) {
+                positions.push_back((float(wx)+corners[f][c][0])*BLOCK);
+                positions.push_back((float(y)+corners[f][c][1])*BLOCK);
+                positions.push_back((float(wz)+corners[f][c][2])*BLOCK);
+                normals.push_back(float(face[f][0]));normals.push_back(float(face[f][1]));normals.push_back(float(face[f][2]));
+                uvs.push_back(c==1||c==2?1.0f:0.0f);uvs.push_back(c>=1&&c<=2?1.0f:0.0f);
+                colors.insert(colors.end(),{65,135,220,150});
+            }
+            indices.insert(indices.end(),{first,static_cast<unsigned short>(first+1),static_cast<unsigned short>(first+2),
+                first,static_cast<unsigned short>(first+2),static_cast<unsigned short>(first+3)});
+        }
+    }
+    if(indices.empty()) return Model{};
+    Mesh mesh{};
+    mesh.vertexCount=int(positions.size()/3u);mesh.triangleCount=int(indices.size()/3u);
+    mesh.vertices=static_cast<float*>(MemAlloc(sizeof(float)*positions.size()));
+    mesh.normals=static_cast<float*>(MemAlloc(sizeof(float)*normals.size()));
+    mesh.texcoords=static_cast<float*>(MemAlloc(sizeof(float)*uvs.size()));
+    mesh.colors=static_cast<unsigned char*>(MemAlloc(colors.size()));
+    mesh.indices=static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short)*indices.size()));
+    if(!mesh.vertices||!mesh.normals||!mesh.texcoords||!mesh.colors||!mesh.indices) {
+        if(mesh.vertices)MemFree(mesh.vertices);if(mesh.normals)MemFree(mesh.normals);
+        if(mesh.texcoords)MemFree(mesh.texcoords);if(mesh.colors)MemFree(mesh.colors);
+        if(mesh.indices)MemFree(mesh.indices);
+        return Model{};
+    }
+    std::copy(positions.begin(),positions.end(),mesh.vertices);
+    std::copy(normals.begin(),normals.end(),mesh.normals);
+    std::copy(uvs.begin(),uvs.end(),mesh.texcoords);
+    std::copy(colors.begin(),colors.end(),mesh.colors);
+    std::copy(indices.begin(),indices.end(),mesh.indices);
+    UploadMesh(&mesh,false);
+    return LoadModelFromMesh(mesh);
+}
 bool is_chunk_mesh_block(mc::world::BlockId id) {
     return ChunkMeshBuilder::is_full_cube_block(id);
 }
@@ -390,6 +456,7 @@ struct RuntimeChunkMesh {
     int x=0,z=0,section=0;
     ChunkMeshData data;
     Model model{};
+    Model waterModel{};
 };
 std::uint64_t runtime_mesh_key(int x,int z,int section) {
     return (std::uint64_t(static_cast<std::uint32_t>(x))<<32) |
@@ -1620,8 +1687,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                             continue;
                         }
                         if(cached.model.meshCount>0) UnloadModel(cached.model);
+                        if(cached.waterModel.meshCount>0) UnloadModel(cached.waterModel);
                         cached.data=ChunkMeshBuilder::build(world,cx,cz,section);
                         cached.model=make_chunk_model(cached.data,blockTexture);
+                        cached.waterModel=make_water_model(world,cx,cz,section);
                         ++chunkBuildsThisFrame;
                     }
                     if(cached.model.meshCount>0) DrawModel(cached.model,Vector3{0,0,0},1.0f,WHITE);
@@ -1629,6 +1698,20 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 }
             }
         }
+        // One translucent draw per visible chunk section, rather than one
+        // immediate-mode cube draw for every water voxel.
+        BeginBlendMode(BLEND_ALPHA);
+        for(auto& entry:runtimeChunkMeshes) {
+            const auto& cached=entry.second;
+            if(cached.waterModel.meshCount==0) continue;
+            const float dx=float(cached.x*Chunk::Width+8)-float(px);
+            const float dz=float(cached.z*Chunk::Depth+8)-float(pz);
+            if(dx*dx+dz*dz>renderRadiusSq) continue;
+            if(cached.section<firstSection||cached.section>lastSection) continue;
+            if(section_in_frustum(camera,cached.x,cached.z,cached.section,GetScreenWidth(),GetScreenHeight()))
+                DrawModel(cached.waterModel,Vector3{0,0,0},1.0f,WHITE);
+        }
+        EndBlendMode();
         for(const auto& dropped:droppedItems)
             DrawCube(Vector3{dropped.x*BLOCK,(dropped.y+0.15f)*BLOCK,dropped.z*BLOCK},
                      0.28f*BLOCK,0.28f*BLOCK,0.28f*BLOCK,color_for(dropped.id));
@@ -1668,7 +1751,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     if(by<minY||by>maxY||x<minX||x>=maxX||z<minZ||z>=maxZ) continue;
                     if(!visibleSections[std::size_t(by/ChunkMeshBuilder::SectionHeight)]) continue;
                     const BlockId id=chunk->get_unchecked(bx,by,bz);
-                    if(id==BlockId::Air||is_chunk_mesh_block(id)) continue;
+                    if(id==BlockId::Air||id==BlockId::Water||is_chunk_mesh_block(id)) continue;
                     const BlockId above=local_or_world(bx,by+1,bz);
                     if(above!=BlockId::Air && above!=BlockId::Water &&
                        local_or_world(bx+1,by,bz)!=BlockId::Air &&
@@ -1704,6 +1787,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     cached.section>=firstSection&&cached.section<=lastSection;
                 if(!visible) {
                     if(cached.model.meshCount>0)UnloadModel(cached.model);
+                    if(cached.waterModel.meshCount>0)UnloadModel(cached.waterModel);
                     it=runtimeChunkMeshes.erase(it);
                 } else ++it;
             }
@@ -1861,8 +1945,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(requestQuit) break;
     }
     if(!requestQuit) save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
-    for(auto& entry:runtimeChunkMeshes)
+    for(auto& entry:runtimeChunkMeshes) {
         if(entry.second.model.meshCount>0) UnloadModel(entry.second.model);
+        if(entry.second.waterModel.meshCount>0) UnloadModel(entry.second.waterModel);
+    }
     for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) {
         if(blockModels[i].meshCount>0) {
             for(int material=0;material<blockModels[i].materialCount;++material)
