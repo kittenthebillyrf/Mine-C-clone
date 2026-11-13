@@ -60,6 +60,30 @@ std::uint64_t World::chunk_revision(int cx,int cz) const {
     const auto* chunk=find_chunk(cx,cz);
     return chunk?chunk->revision():0;
 }
+std::size_t World::tick_falling_blocks() {
+    std::size_t moved=0;
+    // Iterate bottom-up so a falling block can move only one cell per tick.
+    // A column of sand/gravel therefore descends as a stack instead of
+    // teleporting all the way down during one update.
+    for(auto& entry:chunks_) {
+        Chunk& chunk=entry.second;
+        for(int y=1;y<Chunk::Height;++y) {
+            for(int z=0;z<Chunk::Depth;++z) {
+                for(int x=0;x<Chunk::Width;++x) {
+                    const BlockId id=chunk.get(x,y,z);
+                    if(id!=BlockId::Sand && id!=BlockId::Gravel) continue;
+                    const BlockId below=chunk.get(x,y-1,z);
+                    const bool replaceable=below==BlockId::Air || below==BlockId::Water || below==BlockId::Lava;
+                    if(!replaceable) continue;
+                    chunk.set(x,y,z,below);
+                    chunk.set(x,y-1,z,id);
+                    ++moved;
+                }
+            }
+        }
+    }
+    return moved;
+}
 bool World::save(std::ostream& output) const {
     static constexpr char magic[8]={'M','C','C','W','O','R','L','D'};
     output.write(magic,sizeof(magic));
