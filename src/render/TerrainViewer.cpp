@@ -206,7 +206,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     for(int y=std::max(0,top-5);y<top;++y) {
                         const BlockId id=world.get_block(x,y,z);
                         if(id!=BlockId::Air && (y==top-1 || world.get_block(x,y+1,z)==BlockId::Air))
-                            if (IsTextureReady(blockAtlas)) DrawCubeTextureRec(blockAtlas,block_atlas_rect(id),block_center(x,y,z),BLOCK,BLOCK,BLOCK,WHITE);\n                            else if (IsTextureReady(blockAtlas)) DrawCubeTextureRec(blockAtlas,block_atlas_rect(id),block_center(x,y,z),BLOCK,BLOCK,BLOCK,WHITE);\n                else DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
+                            if (IsTextureReady(blockAtlas)) DrawCubeTextureRec(blockAtlas,block_atlas_rect(id),block_center(x,y,z),BLOCK,BLOCK,BLOCK,block_atlas_tint(id));\n                            else if (IsTextureReady(blockAtlas)) DrawCubeTextureRec(blockAtlas,block_atlas_rect(id),block_center(x,y,z),BLOCK,BLOCK,BLOCK,block_atlas_tint(id));\n                else DrawCube(block_center(x,y,z),BLOCK,BLOCK,BLOCK,color_for(id));
                     }
                 }
             }
