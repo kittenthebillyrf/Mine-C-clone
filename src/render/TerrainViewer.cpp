@@ -26,6 +26,37 @@ constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
 constexpr std::size_t MAX_RESIDENT_CHUNKS=100;
 constexpr int KEEP_CHUNK_RADIUS=3;
+
+// Platform-aware Nintendo Switch / standard gamepad face-button layout.
+bool button_a(int pad=0) {
+#ifdef __SWITCH__
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+#else
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+#endif
+}
+bool button_b(int pad=0) {
+#ifdef __SWITCH__
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+#else
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+#endif
+}
+bool button_x(int pad=0) {
+#ifdef __SWITCH__
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_UP);
+#else
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+#endif
+}
+bool button_y(int pad=0) {
+#ifdef __SWITCH__
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+#else
+    return IsGamepadButtonPressed(pad,GAMEPAD_BUTTON_RIGHT_FACE_UP);
+#endif
+}
+
 struct BreakParticle { Vector3 position{}; Vector3 velocity{}; float life=0.0f; float maxLife=0.45f; Color color=WHITE; };
 struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
 Color color_for(mc::world::BlockId id) {
@@ -227,12 +258,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     BlockAtlasAssets& blockAtlas = load_block_atlas();
 #ifdef __SWITCH__
     SetTargetFPS(60);
-    constexpr int renderRadius=7;
+    int renderRadius=8;
     constexpr int verticalRadius=12;
     constexpr int menuRadius=12;
 #else
     SetTargetFPS(120);
-    constexpr int renderRadius=14;
+    int renderRadius=14;
     constexpr int verticalRadius=20;
     constexpr int menuRadius=17;
 #endif
@@ -254,6 +285,22 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool pauseOptionsOpen=false;
     int pauseSelection=0;
     float cameraFov=70.0f;
+#ifdef __SWITCH__
+    const char* detectedDevice="Nintendo Switch";
+    const int recommendedRenderDistance=8;
+#else
+#ifdef _WIN32
+    const char* detectedDevice="Windows PC";
+#else
+#ifdef __APPLE__
+    const char* detectedDevice="Apple device";
+#else
+    const char* detectedDevice="Desktop / Linux";
+#endif
+#endif
+    const int recommendedRenderDistance=14;
+#endif
+    bool showDeviceProfile=true;
     bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
@@ -306,7 +353,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 menuSelection=(menuSelection+3)%4;
             if(IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN)))
                 menuSelection=(menuSelection+1)%4;
-            const bool menuActivate=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+            const bool menuActivate=IsKeyPressed(KEY_ENTER)||(gamepad&&button_a());
             Camera3D menuCamera{};
             const float cx=float(size)*BLOCK*0.5f, cz=float(size)*BLOCK*0.5f;
             menuCamera.position=Vector3{cx+std::sin(menuYaw)*48.0f,34.0f,cz+std::cos(menuYaw)*48.0f};
@@ -377,8 +424,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(paused) {
             const bool up=IsKeyPressed(KEY_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_UP));
             const bool down=IsKeyPressed(KEY_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_DOWN));
-            const bool accept=IsKeyPressed(KEY_ENTER)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
-            const bool back=IsKeyPressed(KEY_BACKSPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+            const bool accept=IsKeyPressed(KEY_ENTER)||(gamepad&&button_a());
+            const bool back=IsKeyPressed(KEY_BACKSPACE)||(gamepad&&button_b());
             if(pauseOptionsOpen) {
                 const int cx=GetScreenWidth()/2, cy=GetScreenHeight()/2;
                 const Rectangle minus{float(cx-150),float(cy-55),52,44};
@@ -418,12 +465,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 }
             }
         }
-        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_UP)))) {
+        if(!paused && (IsKeyPressed(KEY_E)||(gamepad&&button_x()))) {
             inventoryOpen=!inventoryOpen; creativeOpen=false;
             captured=!inventoryOpen;
             if(captured) DisableCursor(); else EnableCursor();
         }
-        if(!paused && IsKeyPressed(KEY_R)) {
+        if(!paused && (IsKeyPressed(KEY_R)||(gamepad&&button_y()))) {
             creativeOpen=!creativeOpen; inventoryOpen=false;
             captured=!creativeOpen;
             if(captured) DisableCursor(); else EnableCursor();
@@ -488,7 +535,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         const bool nowSwimming=player_in_water(world,px,py,pz);
         if(captured && grounded &&
-           (IsKeyPressed(KEY_SPACE)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_FACE_DOWN)))) {
+           (IsKeyPressed(KEY_SPACE)||(gamepad&&button_a()))) {
             vy=nowSwimming?5.0f:10.5f;
             grounded=false;
         }
@@ -685,7 +732,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
-        DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: Left mouse / R2-ZR | Place: Right mouse / L2-ZL | Hotbar: L1/R1 | E: inventory + crafting | R: creative",14,GetScreenHeight()-28,13,RAYWHITE);
+        DrawText("Move: WASD / left stick | Jump: SPACE / A | Break: ZR | Place: ZL | X: Inventory | Y: Crafting | Plus: Pause",14,GetScreenHeight()-28,13,RAYWHITE);
         if(miningProgress>0.0f) {
             const int w=180,x=GetScreenWidth()/2-w/2,y=GetScreenHeight()/2+28;
             DrawRectangle(x,y,w,8,Fade(BLACK,0.65f));
