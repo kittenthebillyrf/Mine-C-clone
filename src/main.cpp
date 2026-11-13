@@ -2,6 +2,7 @@
 #include "world/World.hpp"
 #include "world/WorldGen112.hpp"
 #include "render/TerrainViewer.hpp"
+#include "render/ChunkMesh.hpp"
 #include "assets/Json.hpp"
 #include "assets/BlockModel.hpp"
 
@@ -120,6 +121,7 @@ bool run_world_self_test() {
     // Falling-block simulation: sand and gravel descend one cell per tick,
     // replace liquids, and stop on a solid support.
     if(!world.set_block(2,0,2,mc::world::BlockId::Stone) ||
+       !world.set_block(3,0,2,mc::world::BlockId::Stone) ||
        !world.set_block(2,3,2,mc::world::BlockId::Sand) ||
        !world.set_block(3,3,2,mc::world::BlockId::Gravel) ||
        !world.set_block(3,2,2,mc::world::BlockId::Water)) return false;
@@ -179,7 +181,7 @@ int main(int argc,char** argv) {
     if(self_test) {
         if(!run_world_self_test()) { std::cerr<<"World core test failed\n"; return 2; }
         if(!run_json_self_test() || !run_block_model_self_test()) { std::cerr<<"Resource model test failed\n"; return 3; }
-        std::cout<<"World core and resource model tests passed\n";
+        std::cout<<"World core, greedy chunk mesh and resource model tests passed\n";
         return 0;
     }
     if(open_3d || !export_map) return mc::render::run_terrain_viewer(size,seed);
