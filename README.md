@@ -1,3 +1,11 @@
+## Crafting update
+The survival inventory now includes a working 2x2 crafting grid with these recipes:
+- 1 oak log -> 4 planks
+- 2 vertically aligned planks -> 4 sticks
+- 4 planks -> 1 crafting table
+
+Click a hotbar stack to select it, click a crafting slot to add one item, then click the output slot to craft. Crafted items can be moved to the hotbar and placed where applicable.
+
 # Mine C++ Clone
 
 PC-first C++20 voxel sandbox prototype inspired by Minecraft Java 1.12.2. This is an independent implementation; it does not bundle Minecraft source code or proprietary assets.
