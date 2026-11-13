@@ -251,6 +251,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     float vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=true;
     int selected=0;
+    int creativePage=0;
     ItemStack inventory[INVENTORY_SIZE]{};
     const BlockId startingItems[HOTBAR_SIZE]={
         BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Cobblestone,
@@ -489,13 +490,41 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(stack.count>0) DrawText(TextFormat("%i",stack.count),barX+i*barW+29,barY+41,12,RAYWHITE);
         }
         if(creativeOpen) {
-            const int panelW=560,panelH=330,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
-            DrawRectangle(panelX,panelY,panelW,panelH,Fade(Color{38,38,42,255},0.97f));
+            constexpr int PAGE_SIZE=48, GRID_COLS=8, GRID_ROWS=6;
+            const int totalPages=(int(BLOCK_ID_COUNT)-1+PAGE_SIZE-1)/PAGE_SIZE;
+            const int panelW=704,panelH=470,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            creativePage=std::clamp(creativePage,0,totalPages-1);
+            if(IsKeyPressed(KEY_PAGE_DOWN)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))
+                creativePage=(creativePage+1)%totalPages;
+            if(IsKeyPressed(KEY_PAGE_UP)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)))
+                creativePage=(creativePage+totalPages-1)%totalPages;
+            DrawRectangle(panelX,panelY,panelW,panelH,Fade(Color{38,38,42,255},0.98f));
             DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
-            DrawText("CREATIVE MODE",panelX+22,panelY+18,26,RAYWHITE);
-            DrawText("Creative inventory is not implemented yet.",panelX+24,panelY+88,19,YELLOW);
-            DrawText("This menu will contain the full block and item catalog.",panelX+24,panelY+126,16,LIGHTGRAY);
-            DrawText("R: close",panelX+24,panelY+282,16,RAYWHITE);
+            DrawText("CREATIVE INVENTORY",panelX+20,panelY+14,25,RAYWHITE);
+            DrawText(TextFormat("Page %i / %i",creativePage+1,totalPages),panelX+panelW-125,panelY+20,16,YELLOW);
+            const Vector2 mouse=GetMousePosition();
+            for(int i=0;i<PAGE_SIZE;++i) {
+                const int raw=1+creativePage*PAGE_SIZE+i;
+                if(raw>=int(BLOCK_ID_COUNT)) break;
+                const int col=i%GRID_COLS,row=i/GRID_COLS;
+                const int sx=panelX+18+col*84,sy=panelY+54+row*56;
+                const Rectangle cell{float(sx),float(sy),78.0f,50.0f};
+                const bool hover=CheckCollisionPointRec(mouse,cell);
+                DrawRectangleRec(cell,hover?Color{90,90,96,255}:Color{58,58,64,255});
+                DrawRectangleLinesEx(cell,1,hover?YELLOW:GRAY);
+                const BlockId id=static_cast<BlockId>(raw);
+                DrawRectangle(sx+5,sy+7,24,24,color_for(id));
+                const std::string label(block_info(id).name);
+                DrawText(label.c_str(),sx+32,sy+8,9,RAYWHITE);
+                if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    inventory[selected]={id,64};
+                    creativeOpen=false;
+                    captured=true;
+                    DisableCursor();
+                }
+            }
+            DrawText("Click a block to put 64 in the selected hotbar slot",panelX+20,panelY+402,14,LIGHTGRAY);
+            DrawText("Page Up / Page Down or L1 / R1: pages    R: close",panelX+20,panelY+430,14,RAYWHITE);
         }
         if(paused) {
             DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),Fade(BLACK,0.68f));
