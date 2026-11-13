@@ -263,9 +263,10 @@ int main(int argc,char** argv) {
     }
     if(self_test) {
         if(!run_world_self_test()) { std::cerr<<"World core test failed\n"; return 2; }
+        if(!run_player_physics_self_test()) { std::cerr<<"Player physics test failed\n"; return 5; }
         if(!run_chunk_mesh_self_test()) { std::cerr<<"Chunk greedy-mesh test failed\n"; return 4; }
         if(!run_json_self_test() || !run_block_model_self_test()) { std::cerr<<"Resource model test failed\n"; return 3; }
-        std::cout<<"World core, greedy chunk mesh and resource model tests passed\n";
+        std::cout<<"World core, player physics, greedy chunk mesh and resource model tests passed\n";
         return 0;
     }
     if(open_3d || !export_map) return mc::render::run_terrain_viewer(size,seed);
