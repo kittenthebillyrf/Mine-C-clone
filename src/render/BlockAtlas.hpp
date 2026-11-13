@@ -53,6 +53,69 @@ struct BlockAtlasAssets {
     Material material{};
     Mesh meshes[11]{};
 };
+
+// Build a cube with independent UVs for every face. The previous implementation
+// remapped the generated cube UVs as if all six faces shared one continuous atlas
+// rectangle; that caused seams and incorrect sampling at tile boundaries.
+inline Mesh make_block_mesh(int sideTile, int topTile, int bottomTile) {
+    static constexpr float faceVertices[6][12] = {
+        // +Z, -Z, +X, -X, +Y, -Y; four vertices per face, outward winding.
+        {-1,-1, 1,  1,-1, 1,  1, 1, 1, -1, 1, 1},
+        { 1,-1,-1, -1,-1,-1, -1, 1,-1,  1, 1,-1},
+        { 1,-1, 1,  1,-1,-1,  1, 1,-1,  1, 1, 1},
+        {-1,-1,-1, -1,-1, 1, -1, 1, 1, -1, 1,-1},
+        {-1, 1, 1,  1, 1, 1,  1, 1,-1, -1, 1,-1},
+        {-1,-1,-1,  1,-1,-1,  1,-1, 1, -1,-1, 1}
+    };
+    static constexpr float faceNormals[6][3] = {
+        {0,0,1}, {0,0,-1}, {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}
+    };
+    static constexpr unsigned short faceIndices[6] = {0,1,2, 0,2,3};
+
+    Mesh mesh{};
+    mesh.vertexCount = 24;
+    mesh.triangleCount = 12;
+    mesh.vertices = static_cast<float*>(MemAlloc(sizeof(float) * 24 * 3));
+    mesh.texcoords = static_cast<float*>(MemAlloc(sizeof(float) * 24 * 2));
+    mesh.normals = static_cast<float*>(MemAlloc(sizeof(float) * 24 * 3));
+    mesh.indices = static_cast<unsigned short*>(MemAlloc(sizeof(unsigned short) * 36));
+    if (!mesh.vertices || !mesh.texcoords || !mesh.normals || !mesh.indices) {
+        if (mesh.vertices) MemFree(mesh.vertices);
+        if (mesh.texcoords) MemFree(mesh.texcoords);
+        if (mesh.normals) MemFree(mesh.normals);
+        if (mesh.indices) MemFree(mesh.indices);
+        return Mesh{};
+    }
+
+    for (int face = 0; face < 6; ++face) {
+        const int tile = (face == 4) ? topTile : ((face == 5) ? bottomTile : sideTile);
+        const float tileX = float(tile % 4) * 16.0f;
+        const float tileY = float(tile / 4) * 16.0f;
+        // Half-texel inset prevents neighbouring atlas tiles bleeding into a face.
+        const float u0 = (tileX + 0.5f) / 64.0f;
+        const float u1 = (tileX + 15.5f) / 64.0f;
+        const float v0 = 1.0f - (tileY + 15.5f) / 64.0f;
+        const float v1 = 1.0f - (tileY + 0.5f) / 64.0f;
+        const float uv[4][2] = {{u0,v0}, {u1,v0}, {u1,v1}, {u0,v1}};
+
+        for (int corner = 0; corner < 4; ++corner) {
+            const int vertex = face * 4 + corner;
+            mesh.vertices[vertex*3+0] = faceVertices[face][corner*3+0];
+            mesh.vertices[vertex*3+1] = faceVertices[face][corner*3+1];
+            mesh.vertices[vertex*3+2] = faceVertices[face][corner*3+2];
+            mesh.texcoords[vertex*2+0] = uv[corner][0];
+            mesh.texcoords[vertex*2+1] = uv[corner][1];
+            mesh.normals[vertex*3+0] = faceNormals[face][0];
+            mesh.normals[vertex*3+1] = faceNormals[face][1];
+            mesh.normals[vertex*3+2] = faceNormals[face][2];
+        }
+        const int indexBase = face * 6;
+        for (int i = 0; i < 6; ++i)
+            mesh.indices[indexBase+i] = static_cast<unsigned short>(face*4 + faceIndices[i]);
+    }
+    UploadMesh(&mesh, false);
+    return mesh;
+}
 inline BlockAtlasAssets& load_block_atlas() {
     static BlockAtlasAssets assets{};
     static bool attempted = false;
@@ -62,22 +125,20 @@ inline BlockAtlasAssets& load_block_atlas() {
         Image image = LoadImageFromMemory(".png", bytes.data(), static_cast<int>(bytes.size()));
         if (image.data != nullptr) {
             assets.texture = LoadTextureFromImage(image);
+            const bool validAtlas = image.width == 64 && image.height == 64;
             UnloadImage(image);
-            SetTextureFilter(assets.texture, TEXTURE_FILTER_POINT);
-            assets.material = LoadMaterialDefault();
-            SetMaterialTexture(&assets.material, MATERIAL_MAP_DIFFUSE, assets.texture);
-            for (int tile = 0; tile < 11; ++tile) {
-                Mesh& mesh = assets.meshes[tile];
-                mesh = GenMeshCube(2.0f, 2.0f, 2.0f);
-                const float u0 = float(tile % 4) * 0.25f;
-                const float v0 = float(tile / 4) * 0.25f;
-                if (mesh.texcoords != nullptr) {
-                    for (int vertex = 0; vertex < mesh.vertexCount; ++vertex) {
-                        mesh.texcoords[vertex * 2] = u0 + mesh.texcoords[vertex * 2] * 0.25f;
-                        mesh.texcoords[vertex * 2 + 1] = v0 + mesh.texcoords[vertex * 2 + 1] * 0.25f;
-                    }
+            if (validAtlas && assets.texture.id != 0) {
+                SetTextureFilter(assets.texture, TEXTURE_FILTER_POINT);
+                assets.material = LoadMaterialDefault();
+                SetMaterialTexture(&assets.material, MATERIAL_MAP_DIFFUSE, assets.texture);
+                for (int tile = 0; tile < 11; ++tile) {
+                    const int topTile = tile;
+                    const int bottomTile = (tile == 1) ? 2 : tile; // Grass block bottom = dirt.
+                    assets.meshes[tile] = make_block_mesh(tile, topTile, bottomTile);
                 }
-                UploadMesh(&mesh, false);
+            } else if (assets.texture.id != 0) {
+                UnloadTexture(assets.texture);
+                assets.texture = Texture2D{};
             }
         }
     }
