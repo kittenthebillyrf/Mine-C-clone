@@ -84,6 +84,7 @@ Color color_for(mc::world::BlockId id) {
         case BlockId::Furnace:return Color{105,105,105,255};
         case BlockId::OakSlab:return Color{170,130,75,255};
         case BlockId::OakFence:return Color{150,110,60,255};
+        case BlockId::Lava:return Color{235,85,20,255};
         default:return BLANK;
     }
 }
@@ -121,7 +122,7 @@ Model make_block_model(mc::world::BlockId id) {
 }
 void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
     const auto index=static_cast<unsigned int>(id);
-    if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice) {
+    if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
         DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); return;
     }
     if(index<7 && models[index].meshCount>0) DrawModel(models[index],center,1.0f,WHITE);
