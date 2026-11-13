@@ -253,6 +253,25 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
                 else if(y<=sea) world.set_block(ox+x,y,oz+z,BlockId::Water);
             }
 
+    // Ensure every terrain column has a continuous stone body down to the
+    // bedrock floor, as in Java 1.12. The density interpolation above still
+    // supplies the detailed terrain where it is positive; this column pass
+    // fills gaps left by incomplete density/noise coverage without replacing
+    // existing terrain. Caves are carved afterwards.
+    for(int x=0;x<16;++x) for(int z=0;z<16;++z) {
+        const int wx=ox+x,wz=oz+z;
+        const int surface_y=std::clamp(terrain_height(wx,wz),5,120);
+        for(int y=5;y<=surface_y;++y) {
+            const BlockId current=world.get_block(wx,y,wz);
+            if(current==BlockId::Air||current==BlockId::Water)
+                world.set_block(wx,y,wz,BlockId::Stone);
+        }
+        for(int y=surface_y+1;y<=sea;++y) {
+            if(world.get_block(wx,y,wz)==BlockId::Air)
+                world.set_block(wx,y,wz,BlockId::Water);
+        }
+    }
+
     // Surface layers: desert sand, snowy snow, and grass/dirt elsewhere.
     const auto surface_noise=surface_->generate_region(ox,0,oz,16,1,16,0.0625,1.0,0.0625);
     const std::uint64_t chunk_seed=std::uint64_t(cx)*341873128712ULL+std::uint64_t(cz)*132897987541ULL;
