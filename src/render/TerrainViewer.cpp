@@ -153,6 +153,7 @@ Color color_for(mc::world::BlockId id) {
     }
 }
 int texture_slot(mc::world::BlockId id) {
+    if(id==mc::world::BlockId::OakStairs) return static_cast<int>(mc::world::BlockId::OakPlanks);
     const int slot=static_cast<int>(id);
     return (slot>0 && slot<static_cast<int>(mc::world::BLOCK_ID_COUNT))?slot:-1;
 }
@@ -205,6 +206,15 @@ void draw_block(Model* models,mc::world::BlockId id,Vector3 center) {
         DrawSphere(Vector3{center.x,center.y+BLOCK*0.16f,center.z},0.075f,Color{255,220,105,245});
         // Soft local glow cue; actual world-light propagation is a later lighting stage.
         DrawSphere(Vector3{center.x,center.y+BLOCK*0.12f,center.z},0.22f,Color{255,170,55,28});
+        return;
+    }
+    if(id==mc::world::BlockId::OakStairs && models[static_cast<unsigned int>(mc::world::BlockId::OakPlanks)].meshCount>0) {
+        // Default stair state: lower full-width tread and an upper rear half-step.
+        const Model& plank=models[static_cast<unsigned int>(mc::world::BlockId::OakPlanks)];
+        DrawModelEx(plank,Vector3{center.x,center.y-BLOCK*0.25f,center.z},
+                    Vector3{0,1,0},0.0f,Vector3{1.0f,0.5f,1.0f},WHITE);
+        DrawModelEx(plank,Vector3{center.x,center.y+BLOCK*0.25f,center.z+BLOCK*0.25f},
+                    Vector3{0,1,0},0.0f,Vector3{1.0f,0.5f,0.5f},WHITE);
         return;
     }
     if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
