@@ -180,7 +180,18 @@ bool run_chunk_mesh_self_test() {
     // A non-cube neighbour cannot incorrectly hide a full-cube face.
     if(!partialWorld.set_block(0,1,1,mc::world::BlockId::Stone)) return false;
     const auto mixed=mc::render::ChunkMeshBuilder::build(partialWorld,0,0,0);
-    return mixed.vertices.size()==24 && mixed.indices.size()==36;
+    if(mixed.vertices.size()!=24 || mixed.indices.size()!=36) return false;
+
+    // A block placed across a chunk edge changes the visible face set of
+    // the previous chunk even though that chunk's own revision is unchanged.
+    mc::world::World boundaryWorld;
+    if(!boundaryWorld.set_block(15,0,0,mc::world::BlockId::Stone)) return false;
+    const auto boundaryMesh=mc::render::ChunkMeshBuilder::build(boundaryWorld,0,0,0);
+    if(boundaryMesh.vertices.size()!=24 || !boundaryMesh.is_current(boundaryWorld,0,0)) return false;
+    if(!boundaryWorld.set_block(16,0,0,mc::world::BlockId::Stone)) return false;
+    if(boundaryMesh.is_current(boundaryWorld,0,0)) return false;
+    const auto updatedBoundary=mc::render::ChunkMeshBuilder::build(boundaryWorld,0,0,0);
+    return updatedBoundary.vertices.size()==20 && updatedBoundary.is_current(boundaryWorld,0,0);
 }
 }
 int main(int argc,char** argv) {
