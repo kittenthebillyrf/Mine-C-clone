@@ -17,6 +17,8 @@ public:
     bool set_block_state(int world_x,int y,int world_z,const BlockState& state);
     const BlockState* get_block_state(int world_x,int y,int world_z) const;
     bool erase_block_state(int world_x,int y,int world_z);
+    // Advances falling sand/gravel by one deterministic world tick.
+    std::size_t tick_falling_blocks();
     std::uint64_t chunk_revision(int chunk_x,int chunk_z) const;
     std::size_t chunk_count() const { return chunks_.size(); }
     bool save(std::ostream& output) const;
