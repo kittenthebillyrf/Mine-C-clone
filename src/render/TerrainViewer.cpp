@@ -6,6 +6,7 @@
 #include "../world/generation/ChunkGenerator.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -106,18 +107,46 @@ bool add_item(ItemStack* inventory, mc::world::BlockId id) {
     return false;
 }
 bool ray_block(Ray ray,mc::world::World& world,Vector3& hit,Vector3& previous) {
-    Vector3 p=ray.position;
-    const Vector3 step=Vector3Scale(Vector3Normalize(ray.direction),0.08f);
-    int lastX=0,lastY=0,lastZ=0;
-    for(float d=0;d<REACH;d+=0.08f) {
-        const int x=int(std::floor(p.x/BLOCK)),y=int(std::floor(p.y/BLOCK)),z=int(std::floor(p.z/BLOCK));
+    // Amanatides-Woo voxel traversal: visit every crossed block exactly once.
+    // Unlike fixed 0.08-unit stepping, this cannot skip thin edge intersections.
+    const Vector3 direction=Vector3Normalize(ray.direction);
+    if(Vector3LengthSqr(direction)<0.000001f) return false;
+
+    int x=int(std::floor(ray.position.x/BLOCK));
+    int y=int(std::floor(ray.position.y/BLOCK));
+    int z=int(std::floor(ray.position.z/BLOCK));
+    const int stepX=(direction.x>0.0f)?1:((direction.x<0.0f)?-1:0);
+    const int stepY=(direction.y>0.0f)?1:((direction.y<0.0f)?-1:0);
+    const int stepZ=(direction.z>0.0f)?1:((direction.z<0.0f)?-1:0);
+    const float infinity=std::numeric_limits<float>::infinity();
+    const float deltaX=(stepX==0)?infinity:BLOCK/std::abs(direction.x);
+    const float deltaY=(stepY==0)?infinity:BLOCK/std::abs(direction.y);
+    const float deltaZ=(stepZ==0)?infinity:BLOCK/std::abs(direction.z);
+    float maxX=(stepX>0?float(x+1)*BLOCK:float(x)*BLOCK);
+    float maxY=(stepY>0?float(y+1)*BLOCK:float(y)*BLOCK);
+    float maxZ=(stepZ>0?float(z+1)*BLOCK:float(z)*BLOCK);
+    float nextX=(stepX==0)?infinity:(maxX-ray.position.x)/direction.x;
+    float nextY=(stepY==0)?infinity:(maxY-ray.position.y)/direction.y;
+    float nextZ=(stepZ==0)?infinity:(maxZ-ray.position.z)/direction.z;
+
+    int previousX=x,previousY=y,previousZ=z;
+    float travelled=0.0f;
+    while(travelled<=REACH) {
         const auto id=world.get_block(x,y,z);
         if(id!=mc::world::BlockId::Air && id!=mc::world::BlockId::Water) {
             hit=Vector3{float(x),float(y),float(z)};
-            previous=Vector3{float(lastX),float(lastY),float(lastZ)};
+            previous=Vector3{float(previousX),float(previousY),float(previousZ)};
             return true;
         }
-        lastX=x; lastY=y; lastZ=z; p=Vector3Add(p,step);
+
+        previousX=x; previousY=y; previousZ=z;
+        if(nextX<=nextY && nextX<=nextZ) {
+            travelled=nextX; nextX+=deltaX; x+=stepX;
+        } else if(nextY<=nextZ) {
+            travelled=nextY; nextY+=deltaY; y+=stepY;
+        } else {
+            travelled=nextZ; nextZ+=deltaZ; z+=stepZ;
+        }
     }
     return false;
 }
