@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace mc::world::generation {
-enum class Biome : std::uint8_t { Plains, Forest, Desert, Taiga, Tundra, Swamp, Savanna };
+enum class Biome : std::uint8_t { Plains, Forest, Desert, Taiga, Tundra, Swamp, Savanna, Rainforest, SeasonalForest, Shrubland, IceDesert };
 struct ColumnSample { int height{}; Biome biome{Biome::Plains}; float temperature{}; float rainfall{}; };
 class ChunkGenerator {
 public:
