@@ -443,7 +443,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                    world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
                 const Vector3 center=block_center(x,y,z);
-                if(id==BlockId::Water || id==BlockId::Leaves) transparentBlocks.emplace_back(id,center);
+                if(id==BlockId::Water) transparentBlocks.emplace_back(id,center);
                 else if(!draw_textured_block(blockAtlas,id,center)) DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
             }
         }
