@@ -61,6 +61,20 @@ bool run_world_self_test() {
     if(world.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
     if(world.chunk_count()!=2) return false;
     if(world.set_block(0,256,0,mc::world::BlockId::Dirt)) return false;
+    // Falling-block simulation: sand and gravel descend one cell per tick,
+    // replace liquids, and stop on a solid support.
+    if(!world.set_block(2,0,2,mc::world::BlockId::Stone) ||
+       !world.set_block(2,3,2,mc::world::BlockId::Sand) ||
+       !world.set_block(3,3,2,mc::world::BlockId::Gravel) ||
+       !world.set_block(3,2,2,mc::world::BlockId::Water)) return false;
+    if(world.tick_falling_blocks()!=2) return false;
+    if(world.get_block(2,2,2)!=mc::world::BlockId::Sand ||
+       world.get_block(3,2,2)!=mc::world::BlockId::Gravel ||
+       world.get_block(3,3,2)!=mc::world::BlockId::Air) return false;
+    if(world.tick_falling_blocks()!=2) return false;
+    if(world.get_block(2,1,2)!=mc::world::BlockId::Sand ||
+       world.get_block(3,1,2)!=mc::world::BlockId::Gravel) return false;
+    if(world.tick_falling_blocks()!=0) return false;
     std::stringstream saved(std::ios::in|std::ios::out|std::ios::binary);
     if(!world.save(saved)) return false;
     mc::world::World restored;
