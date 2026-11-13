@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <iomanip>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -689,17 +691,69 @@ int surface_y(const mc::world::World& world,int x,int z) {
     }
     return 1;
 }
-bool save_world_file(const mc::world::World& world) {
-    const std::string temporary="world.mcc.tmp";
+bool save_world_file(const mc::world::World& world,
+                     double px,double py,double pz,double motionX,double motionY,double motionZ,
+                     float yaw,float pitch,const ItemStack* inventory,int selected) {
+    const std::string worldTemp="world.mcc.tmp";
     {
-        std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
+        std::ofstream output(worldTemp,std::ios::binary|std::ios::trunc);
         if(!output || !world.save(output)) return false;
         output.flush();
         if(!output) return false;
     }
-    // Replace the previous save only after the new file has been fully written.
-    std::remove("world.mcc");
-    if(std::rename(temporary.c_str(),"world.mcc")!=0) return false;
+    // Save player metadata separately from the block-world payload. This is
+    // our own format; no Java Anvil/NBT files are read or written.
+    const std::string playerTemp="world.mcc.player.tmp";
+    {
+        std::ofstream output(playerTemp,std::ios::trunc);
+        if(!output) return false;
+        output << "MCCPLAYER 1\\n" << std::setprecision(17)
+               << px << ' ' << py << ' ' << pz << ' '
+               << motionX << ' ' << motionY << ' ' << motionZ << ' '
+               << yaw << ' ' << pitch << ' ' << selected << '\\n';
+        for(int i=0;i<INVENTORY_SIZE;++i)
+            output << static_cast<unsigned int>(inventory[i].id) << ' '
+                   << inventory[i].count << '\\n';
+        output.flush();
+        if(!output) return false;
+    }
+    std::remove("world.mcc.tmp");
+    if(std::rename(worldTemp.c_str(),"world.mcc")!=0) return false;
+    std::remove("world.mcc.player");
+    if(std::rename(playerTemp.c_str(),"world.mcc.player")!=0) return false;
+    return true;
+}
+bool load_player_state(double& px,double& py,double& pz,
+                       double& motionX,double& motionY,double& motionZ,
+                       float& yaw,float& pitch,ItemStack* inventory,int& selected) {
+    std::ifstream input("world.mcc.player");
+    if(!input) return false;
+    std::string magic;
+    int version=0;
+    if(!(input>>magic>>version)||magic!="MCCPLAYER"||version!=1) return false;
+    double x=0,y=0,z=0,vx=0,vy=0,vz=0;
+    float loadedYaw=0,loadedPitch=0;
+    int hotbar=0;
+    if(!(input>>x>>y>>z>>vx>>vy>>vz>>loadedYaw>>loadedPitch>>hotbar)) return false;
+    if(!std::isfinite(x)||!std::isfinite(y)||!std::isfinite(z)||
+       !std::isfinite(vx)||!std::isfinite(vy)||!std::isfinite(vz)||
+       !std::isfinite(loadedYaw)||!std::isfinite(loadedPitch)||
+       std::abs(x)>30000000.0||std::abs(z)>30000000.0||
+       y<0.0||y>double(mc::world::Chunk::Height+8)||hotbar<0||hotbar>=HOTBAR_SIZE) return false;
+    ItemStack loaded[INVENTORY_SIZE]{};
+    for(int i=0;i<INVENTORY_SIZE;++i) {
+        unsigned int id=0;
+        int count=0;
+        if(!(input>>id>>count)||id>=BLOCK_ID_COUNT||count<0||count>64) return false;
+        loaded[i]={static_cast<mc::world::BlockId>(id),count};
+        if(count==0) loaded[i].id=mc::world::BlockId::Air;
+    }
+    std::string trailing;
+    if(input>>trailing) return false;
+    px=x;py=y;pz=z;motionX=vx;motionY=vy;motionZ=vz;
+    yaw=loadedYaw;pitch=std::clamp(loadedPitch,-1.55f,1.55f);
+    selected=hotbar;
+    std::copy(std::begin(loaded),std::end(loaded),inventory);
     return true;
 }
 bool add_item(ItemStack* inventory, mc::world::BlockId id) {
@@ -781,6 +835,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BlockId::OakPlanks,BlockId::OakLog,BlockId::Sand,BlockId::Glass,BlockId::Water
     };
     for(int i=0;i<HOTBAR_SIZE;++i) inventory[i]={startingItems[i],32};
+    // Restore the complete local player session when a matching custom save
+    // exists. Missing/invalid metadata leaves a fresh spawn and starter bar.
+    load_player_state(px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
     bool inventoryOpen=false;
     bool creativeOpen=false;
     bool paused=false;
@@ -892,11 +949,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                     if(i==0) {
                         paused=false; captured=true; DisableCursor(); pauseSelection=0;
                     } else if(i==1) {
-                        if(save_world_file(world)) saveStatus="Saved successfully: world.mcc";
+                        if(save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected))
+                            saveStatus="Saved world and player: world.mcc";
+                        else saveStatus="Save failed - storage unavailable";
                         else saveStatus="Save failed - storage unavailable";
                     } else {
-                        if(save_world_file(world)) {
-                            saveStatus="Saved successfully: world.mcc";
+                        if(save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected)) {
+                            saveStatus="Saved world and player: world.mcc";
                             requestQuit=true;
                         } else saveStatus="Save failed - exit cancelled";
                     }
@@ -1155,7 +1214,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         EndDrawing();
         if(requestQuit) break;
     }
-    if(!requestQuit) save_world_file(world);
+    if(!requestQuit) save_world_file(world,px,py,pz,motionX,motionY,motionZ,yaw,pitch,inventory,selected);
     for(unsigned int i=1;i<BLOCK_ID_COUNT;++i) {
         if(blockModels[i].meshCount>0) {
             for(int material=0;material<blockModels[i].materialCount;++material)
