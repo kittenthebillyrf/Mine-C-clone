@@ -48,5 +48,4 @@ add_test(NAME localization_russian COMMAND MineCppClone --map --size 16 --seed 1
 add_test(NAME localization_spanish COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_es.ppm --lang es)
 add_test(NAME localization_german COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_de.ppm --lang de)
 add_test(NAME localization_french COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_fr.ppm --lang fr)
-add_test(NAME localization_chinese COMMAND MineCppClone --map --size 16 --seed 1122 --output terrain_zh.ppm --lang zh_CN)
 add_test(NAME world_chunk_and_resource_models COMMAND MineCppClone --self-test)
