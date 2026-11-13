@@ -119,7 +119,7 @@ ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int c
                 p[vAxis]=vSign>0?v:15-v;
                 const int wx=baseX+p[0],wy=baseY+p[1],wz=baseZ+p[2];
                 const auto id=world.get_block(wx,wy,wz);
-                if(!is_full_cube(id)) continue;
+                if(!full_cube(id)) continue;
                 if(occludes(world.get_block(wx+face.dx,wy+face.dy,wz+face.dz))) continue;
                 mask[std::size_t(v*16+u)]=static_cast<std::uint16_t>(id);
             }
