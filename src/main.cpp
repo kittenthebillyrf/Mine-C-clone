@@ -3,6 +3,7 @@
 #include "world/WorldGen112.hpp"
 #include "render/TerrainViewer.hpp"
 #include "assets/Json.hpp"
+#include "assets/BlockModel.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -63,6 +64,26 @@ bool run_json_self_test() {
     return !mc::assets::json::parse(R"({"bad":01})") &&
            !mc::assets::json::parse(R"({"x":1,"x":2})") &&
            !mc::assets::json::parse("[1,]");
+}
+bool run_block_model_self_test() {
+    const auto parsed=mc::assets::parse_block_model(R"({
+      "parent":"block/cube_all",
+      "ambientocclusion":false,
+      "textures":{"all":"minecraft:blocks/stone","particle":"#all"},
+      "elements":[{"from":[0,0,0],"to":[16,16,16],"shade":true,
+        "faces":{"down":{"texture":"#all","uv":[0,0,16,16]},
+                 "up":{"texture":"#all","rotation":90},
+                 "north":{"texture":"#all","cullface":"north","tintindex":2}}}]
+    })");
+    if(!parsed||parsed.model.parent!="block/cube_all"||parsed.model.ambient_occlusion||
+       parsed.model.textures.size()!=2||!parsed.model.has_elements||parsed.model.elements.size()!=1)return false;
+    const auto& element=parsed.model.elements.front();
+    if(element.faces.size()!=3||element.faces.at("up").rotation!=90||
+       element.faces.at("north").tint_index!=2||element.faces.at("north").cull_face!="north")return false;
+    const auto rotated=mc::assets::parse_block_model(R"({"elements":[{"from":[0,0,0],"to":[16,16,16],"rotation":{"origin":[8,8,8],"axis":"y","angle":22.5,"rescale":true},"faces":{"up":{"texture":"#top"}}}]})");
+    if(!rotated||!rotated.model.elements.front().has_rotation||
+       !rotated.model.elements.front().rotation.rescale)return false;
+    return !mc::assets::parse_block_model(R"({"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"side":{"texture":"#x"}}}]})");
 }
 bool run_world_self_test() {
     // java.util.Random reference values for seed 0.
