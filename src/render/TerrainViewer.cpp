@@ -159,7 +159,7 @@ int texture_slot(mc::world::BlockId id) {
 Model make_block_model(mc::world::BlockId id,const Image& atlas) {
     const int slot=texture_slot(id);
     if(slot<0 || !IsImageValid(atlas)) return Model{};
-    const Rectangle crop{float((slot%16)*16),float((slot/16)*16),16.0f,16.0f};
+    const Rectangle crop{float((slot%10)*16),float((slot/10)*16),16.0f,16.0f};
     Image image=ImageFromImage(atlas,crop);
     Texture2D texture=LoadTextureFromImage(image);
     UnloadImage(image);
