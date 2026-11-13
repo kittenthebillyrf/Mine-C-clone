@@ -250,19 +250,42 @@ void OverworldGenerator112::generate_chunk(World& world,int cx,int cz) const {
         }
     }
 
-    // Temporary plains surface pass: keep the density terrain playable while
-    // the full biome-specific surface replacement and cave stages are added.
-    for(int z=0;z<16;++z) for(int x=0;x<16;++x) {
+    // Plains surface replacement based on the 1.12.2 biome terrain pass.
+    // Surface noise and per-chunk Random state are separate from terrain noise.
+    const auto surface_noise=surface_->generate_region(ox,0,oz,16,1,16,
+        0.0625,1.0,0.0625);
+    const std::uint64_t chunk_seed=std::uint64_t(cx)*341873128712ULL
+        +std::uint64_t(cz)*132897987541ULL;
+    JavaRandom chunk_random(static_cast<std::int64_t>(chunk_seed));
+    for(int x=0;x<16;++x) for(int z=0;z<16;++z) {
         const int wx=ox+x,wz=oz+z;
-        int top=-1;
+        const double noise_value=surface_noise[std::size_t(x)*16+z];
+        const int surface_depth=static_cast<int>(noise_value/3.0+3.0
+            +chunk_random.next_double()*0.25);
+        int remaining=-1;
         for(int y=255;y>=0;--y) {
-            const BlockId id=world.get_block(wx,y,wz);
-            if(id==BlockId::Stone||id==BlockId::Bedrock) { top=y; break; }
-        }
-        if(top<0) continue;
-        for(int depth=0;depth<4&&top-depth>0;++depth) {
-            const int y=top-depth;
-            world.set_block(wx,y,wz,depth==0?BlockId::Grass:BlockId::Dirt);
+            if(y<=chunk_random.next_int(5)) {
+                world.set_block(wx,y,wz,BlockId::Bedrock);
+                continue;
+            }
+            const BlockId current=world.get_block(wx,y,wz);
+            if(current==BlockId::Air) {
+                remaining=-1;
+            } else if(current==BlockId::Stone) {
+                if(remaining==-1) {
+                    BlockId top=BlockId::Grass;
+                    BlockId filler=BlockId::Dirt;
+                    if(surface_depth<=0) { top=BlockId::Air; filler=BlockId::Stone; }
+                    if(y<sea && top==BlockId::Air) top=BlockId::Water;
+                    remaining=surface_depth;
+                    if(y>=sea-1) world.set_block(wx,y,wz,top);
+                    else if(y<sea-7-surface_depth) world.set_block(wx,y,wz,BlockId::Gravel);
+                    else world.set_block(wx,y,wz,filler);
+                } else if(remaining>0) {
+                    --remaining;
+                    world.set_block(wx,y,wz,BlockId::Dirt);
+                }
+            }
         }
     }
 }
