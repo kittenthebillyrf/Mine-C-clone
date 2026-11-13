@@ -171,7 +171,10 @@ bool run_chunk_mesh_self_test() {
        !partialWorld.set_block(3,1,1,mc::world::BlockId::OakStairs) ||
        !partialWorld.set_block(4,1,1,mc::world::BlockId::Cactus) ||
        !partialWorld.set_block(5,1,1,mc::world::BlockId::Water) ||
-       !partialWorld.set_block(6,1,1,mc::world::BlockId::Lava)) return false;
+       !partialWorld.set_block(6,1,1,mc::world::BlockId::Lava) ||
+       !partialWorld.set_block(7,1,1,mc::world::BlockId::Glass) ||
+       !partialWorld.set_block(8,1,1,mc::world::BlockId::Ice) ||
+       !partialWorld.set_block(9,1,1,mc::world::BlockId::OakLeaves)) return false;
     if(!mc::render::ChunkMeshBuilder::build(partialWorld,0,0,0).empty()) return false;
 
     // A non-cube neighbour cannot incorrectly hide a full-cube face.
