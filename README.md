@@ -15,13 +15,15 @@ The game opens on a Java 1.12-era inspired main menu with a slowly rotating 3D v
 ## Controls
 
 - WASD — move; mouse — look
-- Space — jump; Left Shift — run
+- Space — jump; Left Control — sprint; Left Shift — crouch
 - Left mouse — break the targeted block
 - Right mouse — place a block from the selected stack
 - 1–9 / mouse wheel — select hotbar slot
 - E — open/close inventory
+- Escape — open/close the pause menu
+- Pause menu: Up/Down + Enter, or D-pad + A on a gamepad
+- Pause actions: Continue, Save World, Save and Quit
 - In inventory, click a hotbar slot to select it; click a storage slot to swap it with the selected hotbar slot
-- Escape — release / recapture the mouse
 
 ## Implemented
 
@@ -29,7 +31,10 @@ The game opens on a Java 1.12-era inspired main menu with a slowly rotating 3D v
 - Seeded terrain with grass, dirt, stone, sand, bedrock and water.
 - Block targeting, breaking and placement.
 - 9-slot hotbar, 36-slot inventory, stack limit of 64.
-- Versioned binary world save format; the game loads `world.mcc` on startup and saves it when the window closes.
+- Independent, versioned `world.mcc` chunk/block save format (not Java Anvil/NBT and no `.mca` import/export).
+- Player session sidecar `world.mcc.player`: position, velocity, camera direction, hotbar selection and all 36 inventory slots.
+- Pause-menu save and save-and-quit, plus save on normal window close; temporary files and backup replacement protect existing saves.
+- Save loading validates the player position and moves the player to a free position if terrain now occupies the saved hitbox.
 - 16 x 256 x 16 chunk storage and support for negative world coordinates.
 - Six language catalogs: English, Russian, Spanish, German, French and Simplified Chinese.
 
@@ -58,4 +63,4 @@ ctest --test-dir build -C Release --output-on-failure
 4. Caves, ores and structures
 5. Cross-platform multiplayer
 
-This is an early playable prototype, not a complete Minecraft 1.12.2 recreation. Collision is still simplified; full crafting, mobs and multiplayer are not implemented.
+This is an early playable prototype, not a complete Minecraft 1.12.2 recreation. Player collision uses an axis-separated AABB solver with partial shapes for slabs, stairs and fences, but still needs in-game regression testing. Full crafting, mobs and multiplayer are not implemented.
