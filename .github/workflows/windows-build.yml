@@ -35,6 +35,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build/Release/MineCppClone.exe dist/
+          Copy-Item assets dist/assets -Recurse -Force
       - name: Commit executable to main
         if: always() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main'
         shell: pwsh
@@ -53,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MineCppClone-Windows-x64
-          path: dist/MineCppClone.exe
+          path: dist/
           if-no-files-found: error
       - name: Report test status
         if: always() && steps.tests.outcome == 'failure'

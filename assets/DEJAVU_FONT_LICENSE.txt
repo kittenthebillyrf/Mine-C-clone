@@ -1,0 +1,15 @@
+DejaVu Sans bitmap font resources
+==================================
+
+Files:
+- dejavu.fnt
+- dejavu.png
+
+Font family: DejaVu Sans
+Copyright and licensing: DejaVu Fonts project.
+The DejaVu fonts are distributed under a permissive free font license.
+License text and terms: https://dejavu-fonts.github.io/License.html
+
+The bitmap atlas and BMFont descriptor are taken from the raylib examples
+resource set (raysan5/raylib, examples/text/resources). The font descriptor
+contains Unicode glyphs including Cyrillic, Latin, and other scripts.
