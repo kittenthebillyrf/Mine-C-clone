@@ -398,13 +398,15 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(down) pauseSelection=(pauseSelection+1)%3;
                 const int bw=300,bh=48,gap=12,bx=GetScreenWidth()/2-bw/2,by=GetScreenHeight()/2-5;
                 const Vector2 mouse=GetMousePosition();
+                bool mouseAccept=false;
                 for(int i=0;i<3;++i) {
                     const Rectangle r{float(bx),float(by+i*(bh+gap)),float(bw),float(bh)};
                     const bool hover=CheckCollisionPointRec(mouse,r);
-                    if(hover) pauseSelection=i;
-                    if(hover&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) accept; // mouse activation handled below
+                    if(hover) {
+                        pauseSelection=i;
+                        if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) mouseAccept=true;
+                    }
                 }
-                const bool mouseAccept=IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
                 if(accept||mouseAccept) {
                     if(pauseSelection==0) { paused=false; captured=true; DisableCursor(); }
                     else if(pauseSelection==1) { pauseOptionsOpen=true; pauseSelection=0; }
