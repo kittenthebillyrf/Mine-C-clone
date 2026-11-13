@@ -22,6 +22,7 @@ struct ChunkMeshData {
 class ChunkMeshBuilder {
 public:
     static constexpr int SectionHeight=16;
+    static bool is_full_cube_block(mc::world::BlockId id);
     static ChunkMeshData build(const mc::world::World& world,int chunk_x,int chunk_z,int section_y);
 };
 }
