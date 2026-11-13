@@ -88,6 +88,20 @@ ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int c
     ChunkMeshData out;
     const auto* chunk=world.find_chunk(cx,cz);
     if(!chunk || sectionY<0 || sectionY>=mc::world::Chunk::Height/SectionHeight) return out;
+    // Resolve neighboring chunks once. The hot voxel loop below uses direct
+    // array access instead of millions of World::get_block hash lookups.
+    const auto* west=world.find_chunk(cx-1,cz);
+    const auto* east=world.find_chunk(cx+1,cz);
+    const auto* north=world.find_chunk(cx,cz-1);
+    const auto* south=world.find_chunk(cx,cz+1);
+    const auto get_neighbor=[&](int x,int y,int z) {
+        if(y<0 || y>=mc::world::Chunk::Height) return mc::world::BlockId::Air;
+        if(x<0) return west?west->get_unchecked(15,y,z):mc::world::BlockId::Air;
+        if(x>=mc::world::Chunk::Width) return east?east->get_unchecked(0,y,z):mc::world::BlockId::Air;
+        if(z<0) return north?north->get_unchecked(x,y,15):mc::world::BlockId::Air;
+        if(z>=mc::world::Chunk::Depth) return south?south->get_unchecked(x,y,0):mc::world::BlockId::Air;
+        return chunk->get_unchecked(x,y,z);
+    };
     out.source_revision=chunk->revision();
     out.neighbor_revisions={world.chunk_revision(cx-1,cz),world.chunk_revision(cx+1,cz),
                             world.chunk_revision(cx,cz-1),world.chunk_revision(cx,cz+1)};
@@ -119,19 +133,20 @@ ChunkMeshData ChunkMeshBuilder::build(const mc::world::World& world,int cx,int c
                 p[uAxis]=uSign>0?u:15-u;
                 p[vAxis]=vSign>0?v:15-v;
                 const int wx=baseX+p[0],wy=baseY+p[1],wz=baseZ+p[2];
-                const auto id=world.get_block(wx,wy,wz);
+                const auto id=chunk->get_unchecked(p[0],p[1],p[2]);
                 if(!full_cube(id)) continue;
-                if(occludes(world.get_block(wx+face.dx,wy+face.dy,wz+face.dz))) continue;
+                if(occludes(get_neighbor(p[0]+face.dx,p[1]+face.dy,p[2]+face.dz))) continue;
                 mask[std::size_t(v*16+u)]=static_cast<std::uint16_t>(id);
             }
             for(int v=0;v<16;++v) for(int u=0;u<16;) {
                 const std::size_t index=std::size_t(v*16+u);
                 const std::uint16_t id=mask[index];
                 if(id==0) { ++u; continue; }
+                const bool repeatGrassTexture=id==static_cast<std::uint16_t>(mc::world::BlockId::Grass);
                 int width=1;
-                while(u+width<16 && mask[std::size_t(v*16+u+width)]==id) ++width;
+                while(!repeatGrassTexture && u+width<16 && mask[std::size_t(v*16+u+width)]==id) ++width;
                 int height=1;
-                bool extend=true;
+                bool extend=!repeatGrassTexture;
                 while(v+height<16 && extend) {
                     for(int k=0;k<width;++k) {
                         if(mask[std::size_t((v+height)*16+u+k)]!=id) { extend=false; break; }

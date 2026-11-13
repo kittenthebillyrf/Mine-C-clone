@@ -132,12 +132,6 @@ bool is_full_cube_block(BlockId id) {
         case BlockId::Snow:
         case BlockId::Glass:
         case BlockId::Ice:
-        case BlockId::OakLeaves:
-        case BlockId::SpruceLeaves:
-        case BlockId::BirchLeaves:
-        case BlockId::JungleLeaves:
-        case BlockId::AcaciaLeaves:
-        case BlockId::DarkOakLeaves:
         case BlockId::Cactus:
         case BlockId::OakSlab:
         case BlockId::SpruceSlab:

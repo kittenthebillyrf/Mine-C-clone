@@ -21,6 +21,10 @@ public:
     static constexpr std::size_t Volume=std::size_t(Width)*Height*Depth;
     Chunk();
     BlockId get(int x,int y,int z) const;
+    // Fast access for validated local chunk coordinates (no bounds/hash lookup).
+    BlockId get_unchecked(int x,int y,int z) const {
+        return blocks_[std::size_t(y)*Width*Depth + std::size_t(z)*Width + std::size_t(x)];
+    }
     bool set(int x,int y,int z,BlockId block);
     std::size_t count(BlockId block) const;
     bool set_state(int x,int y,int z,const BlockState& state);
