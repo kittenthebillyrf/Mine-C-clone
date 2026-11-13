@@ -148,6 +148,19 @@ bool run_world_self_test() {
         const auto* state=restored.get_block_state(5+int(facing),12,4);
         if(!state || state->facing!=facing || state->shape!=(facing&1u)) return false;
     }
+    // A truncated or extended save must be rejected without destroying the
+    // currently loaded world (load() parses into a temporary map first).
+    const std::string completeSave=saved.str();
+    if(completeSave.size()<16) return false;
+    std::stringstream truncatedSave(completeSave.substr(0,completeSave.size()-1),
+                                    std::ios::in|std::ios::binary);
+    if(restored.load(truncatedSave) ||
+       restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
+       restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
+    std::stringstream extendedSave(completeSave+std::string(1,'X'),
+                                   std::ios::in|std::ios::binary);
+    if(restored.load(extendedSave) ||
+       restored.get_block(0,10,0)!=mc::world::BlockId::Stone) return false;
     if(!restored.set_block(4,12,4,mc::world::BlockId::Air) ||
        restored.get_block_state(4,12,4)!=nullptr) return false;
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
