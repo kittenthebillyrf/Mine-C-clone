@@ -24,6 +24,9 @@ constexpr float REACH=16.0f; // 8 blocks at the current 2-unit block scale.
 constexpr float MAX_PITCH=1.52f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
+constexpr std::size_t MAX_RESIDENT_CHUNKS=100;
+constexpr int KEEP_CHUNK_RADIUS=3;
+struct BreakParticle { Vector3 position{}; Vector3 velocity{}; float life=0.0f; float maxLife=0.45f; Color color=WHITE; };
 struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
 Color color_for(mc::world::BlockId id) {
     using mc::world::BlockId;
@@ -157,10 +160,15 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     World world;
     const generation::ChunkGenerator generator(seed);
     std::deque<ChunkPos> pendingChunks;
+    std::deque<ChunkPos> residentOrder;
+    std::vector<BreakParticle> breakParticles;
     { std::ifstream saveFile("world.mcc",std::ios::binary); if(saveFile) world.load(saveFile); }
     const int spawnChunkX=(size/2)/Chunk::Width, spawnChunkZ=(size/2)/Chunk::Depth;
-    if(world.find_chunk(spawnChunkX,spawnChunkZ)==nullptr)
-        generator.generate_chunk(world,spawnChunkX,spawnChunkZ);
+    if(world.find_chunk(spawnChunkX,spawnChunkZ)==nullptr) {
+        if(!world.load_chunk_file(spawnChunkX,spawnChunkZ,"world_chunks"))
+            generator.generate_chunk(world,spawnChunkX,spawnChunkZ);
+    }
+    for(const ChunkPos& pos:world.chunk_positions()) residentOrder.push_back(pos);
     const auto ensure_chunks = [&](int world_x,int world_z) {
         const int centerX=world_x/Chunk::Width, centerZ=world_z/Chunk::Depth;
         for(int cz=std::max(0,centerZ-2);cz<=std::min((size-1)/Chunk::Depth,centerZ+2);++cz)
@@ -192,6 +200,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     float vx=0.0f,vz=0.0f,vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=player_collides(world,px,py-0.05f,pz);
     int selected=0;
+    int miningX=-1,miningY=-1,miningZ=-1;
+    float miningProgress=0.0f;
     ItemStack inventory[INVENTORY_SIZE]{};
     const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
     for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
@@ -213,8 +223,35 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(!pendingChunks.empty()) {
             const ChunkPos next=pendingChunks.front();
             pendingChunks.pop_front();
-            if(world.find_chunk(next.x,next.z)==nullptr)
-                generator.generate_chunk(world,next.x,next.z);
+            if(world.find_chunk(next.x,next.z)==nullptr) {
+                if(!world.load_chunk_file(next.x,next.z,"world_chunks"))
+                    generator.generate_chunk(world,next.x,next.z);
+                if(world.find_chunk(next.x,next.z)!=nullptr) residentOrder.push_back(next);
+            }
+        }
+        // Bound RAM while retaining a safety ring around the active player.
+        while(world.chunk_count()>MAX_RESIDENT_CHUNKS && !residentOrder.empty()) {
+            const ChunkPos candidate=residentOrder.front();
+            residentOrder.pop_front();
+            const int centerX=int(px)/Chunk::Width,centerZ=int(pz)/Chunk::Depth;
+            if(std::abs(candidate.x-centerX)<=KEEP_CHUNK_RADIUS &&
+               std::abs(candidate.z-centerZ)<=KEEP_CHUNK_RADIUS) {
+                residentOrder.push_back(candidate);
+                if(residentOrder.size()<=MAX_RESIDENT_CHUNKS) break;
+                continue;
+            }
+            if(world.find_chunk(candidate.x,candidate.z)) {
+                if(world.save_chunk_file(candidate.x,candidate.z,"world_chunks"))
+                    world.unload_chunk(candidate.x,candidate.z);
+                else residentOrder.push_back(candidate);
+            }
+            if(residentOrder.empty()) break;
+        }
+        for(auto it=breakParticles.begin();it!=breakParticles.end();) {
+            it->life+=dt;
+            it->velocity.y-=18.0f*dt;
+            it->position=Vector3Add(it->position,Vector3Scale(it->velocity,dt));
+            if(it->life>=it->maxLife) it=breakParticles.erase(it); else ++it;
         }
         if(inMenu) {
             menuYaw+=dt*0.055f;
@@ -439,13 +476,37 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         Vector3 hit{},previous{};
         const Ray centerRay{camera.position,Vector3Normalize(Vector3Subtract(camera.target,camera.position))};
         const bool hasTarget=ray_block(centerRay,world,hit,previous);
-        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f))) {
+        const bool miningHeld=IsMouseButtonDown(MOUSE_BUTTON_LEFT)||
+            (gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_LEFT_TRIGGER)>0.2f);
+        if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&miningHeld) {
             const int bx=int(hit.x),by=int(hit.y),bz=int(hit.z);
-            const BlockId broken=world.get_block(bx,by,bz);
-            if(broken!=BlockId::Air&&broken!=BlockId::Bedrock&&broken!=BlockId::Water) {
-                // Never delete a block if its drop cannot fit in the inventory.
-                if(add_item(inventory,broken)) world.set_block(bx,by,bz,BlockId::Air);
+            const BlockId targetBlock=world.get_block(bx,by,bz);
+            if(targetBlock!=BlockId::Air&&targetBlock!=BlockId::Bedrock&&targetBlock!=BlockId::Water) {
+                if(bx!=miningX||by!=miningY||bz!=miningZ) {
+                    miningX=bx; miningY=by; miningZ=bz; miningProgress=0.0f;
+                }
+                const float hardness=(targetBlock==BlockId::Dirt||targetBlock==BlockId::Sand||
+                    targetBlock==BlockId::Gravel||targetBlock==BlockId::Leaves)?0.32f:
+                    ((targetBlock==BlockId::Wood)?0.55f:0.85f);
+                miningProgress=std::min(1.0f,miningProgress+dt/hardness);
+                if(miningProgress>=1.0f && add_item(inventory,targetBlock)) {
+                    const Vector3 center=block_center(bx,by,bz);
+                    const Color particleColor=color_for(targetBlock);
+                    for(int i=0;i<16;++i) {
+                        const float fx=float((i*37)%11-5)*0.34f;
+                        const float fy=float((i*19)%9)*0.30f+1.2f;
+                        const float fz=float((i*23)%13-6)*0.30f;
+                        breakParticles.push_back(BreakParticle{
+                            Vector3{center.x+fx*0.35f,center.y+fy*0.25f,center.z+fz*0.35f},
+                            Vector3{fx,fy,fz},0.0f,0.42f,particleColor});
+                    }
+                    world.set_block(bx,by,bz,BlockId::Air);
+                    miningX=miningY=miningZ=-1; miningProgress=0.0f;
+                }
             }
+        } else {
+            miningX=miningY=miningZ=-1;
+            miningProgress=0.0f;
         }
         if(!paused&&!inventoryOpen&&!creativeOpen&&captured&&hasTarget&&(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)||(gamepad&&GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_TRIGGER)>0.2f))) {
             const int bx=int(previous.x),by=int(previous.y),bz=int(previous.z);
@@ -488,11 +549,25 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 DrawCube(entry.second,BLOCK,BLOCK,BLOCK,color_for(entry.first));
         }
         EndBlendMode();
+        if(hasTarget) {
+            const Vector3 selectedCenter=block_center(int(hit.x),int(hit.y),int(hit.z));
+            DrawCubeWires(selectedCenter,BLOCK+0.025f,BLOCK+0.025f,BLOCK+0.025f,YELLOW);
+        }
+        for(const BreakParticle& particle:breakParticles) {
+            const float alpha=std::clamp(1.0f-particle.life/particle.maxLife,0.0f,1.0f);
+            DrawCube(particle.position,0.16f,0.16f,0.16f,Fade(particle.color,alpha));
+        }
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
         DrawText("Move: WASD / left stick | Look: mouse / right stick | Jump: SPACE / A | Break: R2 / ZR | Place: L2 / ZL | Hotbar: L1/R1 | E: inventory + crafting | R: creative",14,GetScreenHeight()-28,13,RAYWHITE);
+        if(miningProgress>0.0f) {
+            const int w=180,x=GetScreenWidth()/2-w/2,y=GetScreenHeight()/2+28;
+            DrawRectangle(x,y,w,8,Fade(BLACK,0.65f));
+            DrawRectangle(x,y,int(float(w)*miningProgress),8,YELLOW);
+            DrawRectangleLines(x,y,w,8,RAYWHITE);
+        }
         DrawRectangle(GetScreenWidth()/2-1,GetScreenHeight()/2-8,2,16,RAYWHITE);
         DrawRectangle(GetScreenWidth()/2-8,GetScreenHeight()/2-1,16,2,RAYWHITE);
         const int barW=52,barX=GetScreenWidth()/2-(barW*HOTBAR_SIZE)/2,barY=GetScreenHeight()-100;
