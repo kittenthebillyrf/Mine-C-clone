@@ -61,6 +61,13 @@ bool run_world_self_test() {
     if(world.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
     if(world.chunk_count()!=2) return false;
     if(world.set_block(0,256,0,mc::world::BlockId::Dirt)) return false;
+    // Every newly registered wood variant must have a stable, solid block definition.
+    for(std::uint16_t raw=100;raw<115;++raw) {
+        const auto id=static_cast<mc::world::BlockId>(raw);
+        const auto& info=mc::world::block_info(id);
+        if(info.id!=id || info.name.empty() || !info.solid) return false;
+    }
+    if(!world.set_block(4,12,4,mc::world::BlockId::DarkOakStairs)) return false;
     // Falling-block simulation: sand and gravel descend one cell per tick,
     // replace liquids, and stop on a solid support.
     if(!world.set_block(2,0,2,mc::world::BlockId::Stone) ||
@@ -82,7 +89,8 @@ bool run_world_self_test() {
     if(!restored.load(saved)) return false;
     if(restored.chunk_count()!=2 ||
        restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
-       restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
+       restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass ||
+       restored.get_block(4,12,4)!=mc::world::BlockId::DarkOakStairs) return false;
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
 }
 }
