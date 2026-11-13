@@ -423,19 +423,19 @@ void tick_vanilla_player(const mc::world::World& world,double& px,double& py,dou
         // EntityLivingBase.jump(): exact 1.12.2 base impulse and sprint impulse.
         motionY=0.42;
         if(sprinting) {
-            const float mcYaw=(cameraYaw+3.14159265358979323846F)*0.017453292F;
-            motionX-=double(std::sin(mcYaw)*0.2F);
-            motionZ+=double(std::cos(mcYaw)*0.2F);
+            const float mcYawRadians=cameraYaw+3.14159265358979323846F;
+            motionX-=double(std::sin(mcYawRadians)*0.2F);
+            motionZ+=double(std::cos(mcYawRadians)*0.2F);
         }
         jumpTicks=10;
     }
 
     moveStrafe*=0.98F;
     moveForward*=0.98F;
-    const float mcYaw=cameraYaw+180.0F;
+    const float mcYawDegrees=cameraYaw*57.29577951308232F+180.0F;
     if(water) {
         const double oldY=py;
-        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYaw);
+        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,0.02F,mcYawDegrees);
         bool cH=false,cV=false;
         move_player_entity(world,px,py,pz,motionX,motionY,motionZ,sneaking,onGround,cH,cV,onGround);
         if(cH) motionX=motionZ=0.0;
@@ -463,7 +463,7 @@ void tick_vanilla_player(const mc::world::World& world,double& px,double& py,dou
         if(onGround) friction=block_slipperiness(world.get_block(belowX,belowY,belowZ))*0.91F;
         const float acceleration=0.16277136F/(friction*friction*friction);
         const float moveFactor=onGround?(sprinting?0.13000001F:0.1F)*acceleration:(sprinting?0.026F:0.02F);
-        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,moveFactor,mcYaw);
+        move_relative(motionX,motionY,motionZ,moveStrafe,0.0F,moveForward,moveFactor,mcYawDegrees);
         friction=0.91F;
         if(onGround) friction=block_slipperiness(world.get_block(belowX,belowY,belowZ))*0.91F;
         bool cH=false,cV=false;
