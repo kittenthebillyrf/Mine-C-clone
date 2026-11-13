@@ -23,19 +23,20 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -A x64
       - name: Build
+        id: build
         run: cmake --build build --config Release
       - name: Test
         id: tests
         continue-on-error: true
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Package executable
-        if: always() && steps.Build.outcome == 'success'
+        if: always() && steps.build.outcome == 'success'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build/Release/MineCppClone.exe dist/
       - name: Commit executable to main
-        if: always() && steps.Build.outcome == 'success' && github.ref == 'refs/heads/main'
+        if: always() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           Copy-Item build/Release/MineCppClone.exe MineCppClone.exe -Force
@@ -48,7 +49,7 @@ jobs:
             git push origin HEAD:main
           }
       - name: Upload executable
-        if: always() && steps.Build.outcome == 'success'
+        if: always() && steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: MineCppClone-Windows-x64
