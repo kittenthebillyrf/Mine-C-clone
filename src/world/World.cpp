@@ -1,6 +1,10 @@
 #include "World.hpp"
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <utility>
 #include <istream>
 #include <ostream>
 #include <unordered_map>
@@ -42,6 +46,71 @@ bool World::set_block(int wx,int y,int wz,BlockId block) {
     if(y<0||y>=Chunk::Height) return false;
     return get_or_create_chunk(floor_div16(wx),floor_div16(wz)).set(local16(wx),y,local16(wz),block);
 }
+
+std::vector<ChunkPos> World::chunk_positions() const {
+    std::vector<ChunkPos> positions;
+    positions.reserve(chunks_.size());
+    for(const auto& entry:chunks_) positions.push_back(entry.first);
+    return positions;
+}
+bool World::unload_chunk(int chunk_x,int chunk_z) {
+    return chunks_.erase(ChunkPos{chunk_x,chunk_z})!=0;
+}
+bool World::save_chunk_file(int chunk_x,int chunk_z,const std::string& directory) const {
+    const auto* chunk=find_chunk(chunk_x,chunk_z);
+    if(!chunk) return false;
+    namespace fs=std::filesystem;
+    std::error_code ec;
+    fs::create_directories(directory,ec);
+    if(ec) return false;
+    const std::string base=directory+"/"+std::to_string(chunk_x)+"_"+std::to_string(chunk_z)+".mcc";
+    const std::string temporary=base+".tmp";
+    {
+        std::ofstream out(temporary,std::ios::binary|std::ios::trunc);
+        static constexpr char magic[8]={'M','C','C','C','H','N','K','1'};
+        out.write(magic,sizeof(magic));
+        if(!out||!write_u32(out,static_cast<std::uint32_t>(chunk_x))||
+           !write_u32(out,static_cast<std::uint32_t>(chunk_z))) return false;
+        for(int y=0;y<Chunk::Height;++y) for(int z=0;z<Chunk::Depth;++z) for(int x=0;x<Chunk::Width;++x) {
+            const auto id=static_cast<std::uint16_t>(chunk->get(x,y,z));
+            out.put(static_cast<char>(id&0xffu));
+            out.put(static_cast<char>((id>>8)&0xffu));
+            if(!out) return false;
+        }
+        out.flush();
+        if(!out) return false;
+    }
+    fs::remove(base,ec);
+    ec.clear();
+    fs::rename(temporary,base,ec);
+    if(ec) { fs::remove(temporary,ec); return false; }
+    return true;
+}
+bool World::load_chunk_file(int chunk_x,int chunk_z,const std::string& directory) {
+    const std::string path=directory+"/"+std::to_string(chunk_x)+"_"+std::to_string(chunk_z)+".mcc";
+    std::ifstream in(path,std::ios::binary);
+    if(!in) return false;
+    static constexpr char magic[8]={'M','C','C','C','H','N','K','1'};
+    char header[8]{};
+    in.read(header,sizeof(header));
+    if(!in||!std::equal(std::begin(header),std::end(header),std::begin(magic))) return false;
+    std::uint32_t rawX=0,rawZ=0;
+    if(!read_u32(in,rawX)||!read_u32(in,rawZ)||
+       static_cast<std::int32_t>(rawX)!=chunk_x||static_cast<std::int32_t>(rawZ)!=chunk_z) return false;
+    Chunk loaded;
+    for(int y=0;y<Chunk::Height;++y) for(int z=0;z<Chunk::Depth;++z) for(int x=0;x<Chunk::Width;++x) {
+        const int lo=in.get(),hi=in.get();
+        if(lo==std::char_traits<char>::eof()||hi==std::char_traits<char>::eof()) return false;
+        const std::uint16_t id=static_cast<std::uint16_t>(static_cast<unsigned char>(lo))|
+                               static_cast<std::uint16_t>(static_cast<unsigned char>(hi)<<8);
+        if(id>static_cast<std::uint16_t>(BlockId::IronOre)) return false;
+        if(!loaded.set(x,y,z,static_cast<BlockId>(id))) return false;
+    }
+    if(in.peek()!=std::char_traits<char>::eof()) return false;
+    chunks_.insert_or_assign(ChunkPos{chunk_x,chunk_z},std::move(loaded));
+    return true;
+}
+
 bool World::save(std::ostream& output) const {
     static constexpr char magic[8]={'M','C','C','W','O','R','L','D'};
     output.write(magic,sizeof(magic));
