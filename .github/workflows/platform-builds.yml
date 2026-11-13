@@ -1,0 +1,63 @@
+name: Desktop EXE and Nintendo Switch NRO
+
+on:
+  push:
+    branches: [worldgen-pe-java112]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    name: Build Windows x64 EXE
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCppClone-Windows-x64
+          path: build/Release/MineCppClone.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  switch-nro:
+    name: Build Nintendo Switch NRO
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:latest
+    env:
+      DEVKITPRO: /opt/devkitpro
+      DEVKITA64: /opt/devkitpro/devkitA64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Switch graphics libraries
+        run: dkp-pacman -Sy --noconfirm switch-dev switch-mesa switch-glad switch-libdrm_nouveau switch-tools
+      - name: Fetch raylib Nintendo Switch backend
+        run: |
+          git clone https://github.com/luizpestana/raylib-nx.git raylib-nx
+          git -C raylib-nx checkout 9978e718cc92c4cf2548c3c20cb5ebb62a7e9b5e
+      - name: Build raylib for Nintendo Switch
+        run: make -C raylib-nx/src PLATFORM=PLATFORM_NX -j2
+      - name: Build NRO
+        run: RAYLIB_NX="$GITHUB_WORKSPACE/raylib-nx" make -j2
+      - name: Verify NRO output
+        run: test -s MineCppClone.nro && file MineCppClone.nro
+      - name: Upload NRO
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCppClone-Nintendo-Switch
+          path: |
+            MineCppClone.nro
+            MineCppClone.nacp
+          if-no-files-found: error
+          retention-days: 14
