@@ -42,6 +42,9 @@ Color color_for(mc::world::BlockId id) {
         case BlockId::Gravel:return Color{115,113,110,255};
         case BlockId::CoalOre:return Color{65,65,68,255};
         case BlockId::IronOre:return Color{190,135,105,255};
+        case BlockId::Planks:return Color{174,132,78,255};
+        case BlockId::Stick:return Color{185,145,91,255};
+        case BlockId::CraftingTable:return Color{145,99,55,255};
         default:return BLANK;
     }
 }
@@ -91,6 +94,38 @@ bool player_in_water(const mc::world::World& world,float px,float feetY,float pz
             for(int x=minX;x<=maxX;++x)
                 if(world.get_block(x,y,z)==mc::world::BlockId::Water) return true;
     return false;
+}
+
+
+struct CraftResult { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
+CraftResult match_recipe(const ItemStack* grid) {
+    using mc::world::BlockId;
+    int total=0,wood=0,planks=0;
+    for(int i=0;i<4;++i) {
+        total+=grid[i].count;
+        if(grid[i].count>0 && grid[i].id==BlockId::Wood) wood+=grid[i].count;
+        if(grid[i].count>0 && grid[i].id==BlockId::Planks) planks+=grid[i].count;
+    }
+    if(total==1 && wood==1) return {BlockId::Planks,4};
+    if(total==2 && planks==2 && grid[0].id==BlockId::Planks && grid[2].id==BlockId::Planks)
+        return {BlockId::Stick,4};
+    if(total==4 && planks==4) return {BlockId::CraftingTable,1};
+    return {};
+}
+bool add_stack(ItemStack* inventory,mc::world::BlockId id,int count) {
+    for(int i=0;i<INVENTORY_SIZE&&count>0;++i) {
+        if(inventory[i].id==id&&inventory[i].count>0&&inventory[i].count<64) {
+            const int moved=std::min(count,64-inventory[i].count);
+            inventory[i].count+=moved; count-=moved;
+        }
+    }
+    for(int i=0;i<INVENTORY_SIZE&&count>0;++i) {
+        if(inventory[i].count==0) {
+            const int moved=std::min(count,64);
+            inventory[i]={id,moved}; count-=moved;
+        }
+    }
+    return count==0;
 }
 
 bool add_item(ItemStack* inventory, mc::world::BlockId id) {
@@ -203,6 +238,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     int miningX=-1,miningY=-1,miningZ=-1;
     float miningProgress=0.0f;
     ItemStack inventory[INVENTORY_SIZE]{};
+    ItemStack craftingGrid[4]{};
     const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
     for(int i=0;i<5;++i) inventory[i]={startingItems[i],32};
     bool inventoryOpen=false;
@@ -450,9 +486,38 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             }
         }
         if(inventoryOpen&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            const int panelW=760,panelH=380,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
             const Vector2 mouse=GetMousePosition();
-            for(int i=0;i<INVENTORY_SIZE;++i) {
+            bool handled=false;
+            for(int slot=0;slot<4;++slot) {
+                const int sx=panelX+550+(slot%2)*58,sy=panelY+82+(slot/2)*58;
+                if(mouse.x>=sx&&mouse.x<sx+48&&mouse.y>=sy&&mouse.y<sy+48) {
+                    if(inventory[selected].count>0) {
+                        if(craftingGrid[slot].count==0||craftingGrid[slot].id==inventory[selected].id) {
+                            craftingGrid[slot].id=inventory[selected].id;
+                            ++craftingGrid[slot].count; --inventory[selected].count;
+                            if(inventory[selected].count==0) inventory[selected].id=BlockId::Air;
+                        }
+                    } else if(craftingGrid[slot].count>0) {
+                        if(add_stack(inventory,craftingGrid[slot].id,1)) {
+                            --craftingGrid[slot].count;
+                            if(craftingGrid[slot].count==0) craftingGrid[slot].id=BlockId::Air;
+                        }
+                    }
+                    handled=true; break;
+                }
+            }
+            const int outX=panelX+690,outY=panelY+140;
+            if(!handled&&mouse.x>=outX&&mouse.x<outX+48&&mouse.y>=outY&&mouse.y<outY+48) {
+                const CraftResult result=match_recipe(craftingGrid);
+                if(result.count>0&&add_stack(inventory,result.id,result.count)) {
+                    for(auto& slot:craftingGrid) if(slot.count>0) {
+                        --slot.count; if(slot.count==0) slot.id=BlockId::Air;
+                    }
+                }
+                handled=true;
+            }
+            if(!handled) for(int i=0;i<INVENTORY_SIZE;++i) {
                 const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
                 if(mouse.x>=sx&&mouse.x<sx+48&&mouse.y>=sy&&mouse.y<sy+50) {
                     if(i<HOTBAR_SIZE) selected=i;
@@ -595,21 +660,42 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             DrawText("Press + / START / ESC to resume",GetScreenWidth()/2-180,GetScreenHeight()/2-18,20,RAYWHITE);
         }
         if(inventoryOpen) {
-            const int panelW=520,panelH=310,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
-            DrawRectangle(panelX,panelY,panelW,panelH,Fade(DARKGRAY,0.96f));
+            const int panelW=760,panelH=380,panelX=GetScreenWidth()/2-panelW/2,panelY=GetScreenHeight()/2-panelH/2;
+            DrawRectangle(panelX,panelY,panelW,panelH,Fade(DARKGRAY,0.97f));
             DrawRectangleLines(panelX,panelY,panelW,panelH,RAYWHITE);
-            DrawText("INVENTORY - E / Triangle to close",panelX+18,panelY+14,22,RAYWHITE);
+            DrawText("INVENTORY",panelX+18,panelY+14,22,RAYWHITE);
+            DrawText("2x2 CRAFTING",panelX+540,panelY+48,18,YELLOW);
             for(int i=0;i<INVENTORY_SIZE;++i) {
                 const int col=i%9,row=i/9,sx=panelX+18+col*54,sy=panelY+55+row*58;
                 DrawRectangle(sx,sy,48,50,Fade(BLACK,0.7f));
                 DrawRectangleLines(sx,sy,48,50,i==selected?YELLOW:GRAY);
                 if(inventory[i].count>0) {
-                    if((blockAtlas.texture.id != 0)) DrawTexturePro(blockAtlas.texture,block_atlas_rect(inventory[i].id),Rectangle{float(sx+10),float(sy+8),28,28},Vector2{0,0},0.0f,WHITE); else DrawRectangle(sx+10,sy+8,28,28,color_for(inventory[i].id));
+                    if(blockAtlas.texture.id!=0) DrawTexturePro(blockAtlas.texture,block_atlas_rect(inventory[i].id),Rectangle{float(sx+10),float(sy+8),28,28},Vector2{0,0},0.0f,WHITE);
+                    else DrawRectangle(sx+10,sy+8,28,28,color_for(inventory[i].id));
                     DrawText(TextFormat("%i",inventory[i].count),sx+27,sy+34,12,RAYWHITE);
                 }
             }
-            DrawText("CRAFTING: recipe area is built into this inventory (recipes coming next)",panelX+18,panelY+252,14,YELLOW);
-            DrawText("Hotbar: keys 1-9 | R: creative menu",panelX+18,panelY+286,14,RAYWHITE);
+            for(int i=0;i<4;++i) {
+                const int sx=panelX+550+(i%2)*58,sy=panelY+82+(i/2)*58;
+                DrawRectangle(sx,sy,48,48,Fade(BLACK,0.75f)); DrawRectangleLines(sx,sy,48,48,GRAY);
+                if(craftingGrid[i].count>0) {
+                    if(blockAtlas.texture.id!=0) DrawTexturePro(blockAtlas.texture,block_atlas_rect(craftingGrid[i].id),Rectangle{float(sx+8),float(sy+7),32,32},Vector2{0,0},0.0f,WHITE);
+                    else DrawRectangle(sx+8,sy+7,32,32,color_for(craftingGrid[i].id));
+                    DrawText(TextFormat("%i",craftingGrid[i].count),sx+29,sy+33,11,RAYWHITE);
+                }
+            }
+            DrawText("=>",panelX+665,panelY+150,22,RAYWHITE);
+            const int outX=panelX+690,outY=panelY+140;
+            DrawRectangle(outX,outY,48,48,Fade(BLACK,0.75f)); DrawRectangleLines(outX,outY,48,48,YELLOW);
+            const CraftResult result=match_recipe(craftingGrid);
+            if(result.count>0) {
+                if(blockAtlas.texture.id!=0) DrawTexturePro(blockAtlas.texture,block_atlas_rect(result.id),Rectangle{float(outX+8),float(outY+7),32,32},Vector2{0,0},0.0f,WHITE);
+                else DrawRectangle(outX+8,outY+7,32,32,color_for(result.id));
+                DrawText(TextFormat("%i",result.count),outX+29,outY+33,11,RAYWHITE);
+            }
+            DrawText("Click a hotbar stack, then a crafting slot. Click output to craft.",panelX+535,panelY+225,13,RAYWHITE);
+            DrawText("Recipes: 1 log = 4 planks | 2 vertical planks = 4 sticks | 4 planks = crafting table",panelX+535,panelY+250,12,LIGHTGRAY);
+            DrawText("Hotbar: keys 1-9 | E: close",panelX+18,panelY+330,14,RAYWHITE);
         }
         DrawText(TextFormat("XYZ %.1f / %.1f / %.1f",px,py/BLOCK,pz),14,48,16,RAYWHITE);
         if(!captured) DrawText("Cursor released - press ESC to resume",GetScreenWidth()/2-170,GetScreenHeight()/2+24,18,YELLOW);
