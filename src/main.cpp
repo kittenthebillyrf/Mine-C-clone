@@ -152,6 +152,17 @@ bool run_world_self_test() {
        restored.get_block_state(4,12,4)!=nullptr) return false;
     return mc::world::block_info(mc::world::BlockId::Stone).solid;
 }
+
+bool run_chunk_mesh_self_test() {
+    mc::world::World world;
+    for(int y=0;y<mc::render::ChunkMeshBuilder::SectionHeight;++y)
+        for(int z=0;z<mc::world::Chunk::Depth;++z)
+            for(int x=0;x<mc::world::Chunk::Width;++x)
+                if(!world.set_block(x,y,z,mc::world::BlockId::Stone)) return false;
+    const auto mesh=mc::render::ChunkMeshBuilder::build(world,0,0,0);
+    return mesh.vertices.size()==24 && mesh.indices.size()==36 &&
+           mesh.source_revision==world.chunk_revision(0,0);
+}
 }
 int main(int argc,char** argv) {
     int size=128; std::uint32_t seed=1122;
