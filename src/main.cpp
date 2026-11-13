@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -39,6 +40,16 @@ bool run_world_self_test() {
     if(restored.chunk_count()!=2 ||
        restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
        restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
+
+    // Verify disk-backed chunk eviction and restoration without retaining RAM copies.
+    const std::string chunkDir="world_chunk_self_test";
+    std::error_code fileError;
+    std::filesystem::remove_all(chunkDir,fileError);
+    if(!restored.save_chunk_file(0,0,chunkDir)) return false;
+    if(!restored.unload_chunk(0,0) || restored.find_chunk(0,0)!=nullptr) return false;
+    if(!restored.load_chunk_file(0,0,chunkDir)) return false;
+    if(restored.get_block(0,10,0)!=mc::world::BlockId::Stone) return false;
+    std::filesystem::remove_all(chunkDir,fileError);
     if(!mc::world::block_info(mc::world::BlockId::Stone).solid) return false;
 
     const mc::world::generation::ChunkGenerator generator(1122);
