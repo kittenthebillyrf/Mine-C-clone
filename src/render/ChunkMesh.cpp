@@ -20,7 +20,8 @@ constexpr Face faces[6]={
 };
 // This mesher emits only axis-aligned full cubes. Non-cube blocks stay on
 // the existing model renderer until their dedicated geometry is supported.
-bool full_cube(mc::world::BlockId id) {
+bool full_cube(mc::world::BlockId id) { return mc::world::is_full_cube_block(id); }
+/*bool full_cube_legacy(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch(id) {
         case BlockId::Air:
@@ -59,7 +60,7 @@ bool full_cube(mc::world::BlockId id) {
         default:
             return mc::world::block_info(id).solid;
     }
-}
+}*/
 bool occludes(mc::world::BlockId id) {
     return full_cube(id);
 }

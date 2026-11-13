@@ -123,4 +123,43 @@ const BlockInfo& block_info(BlockId id) {
     const auto raw=static_cast<std::uint16_t>(id);
     return blocks[raw<blocks.size()?raw:0];
 }
+bool is_full_cube_block(BlockId id) {
+    switch(id) {
+        case BlockId::Air:
+        case BlockId::Water:
+        case BlockId::Lava:
+        case BlockId::Torch:
+        case BlockId::Snow:
+        case BlockId::Glass:
+        case BlockId::Ice:
+        case BlockId::OakLeaves:
+        case BlockId::SpruceLeaves:
+        case BlockId::BirchLeaves:
+        case BlockId::JungleLeaves:
+        case BlockId::AcaciaLeaves:
+        case BlockId::DarkOakLeaves:
+        case BlockId::Cactus:
+        case BlockId::OakSlab:
+        case BlockId::SpruceSlab:
+        case BlockId::BirchSlab:
+        case BlockId::JungleSlab:
+        case BlockId::AcaciaSlab:
+        case BlockId::DarkOakSlab:
+        case BlockId::OakFence:
+        case BlockId::SpruceFence:
+        case BlockId::BirchFence:
+        case BlockId::JungleFence:
+        case BlockId::AcaciaFence:
+        case BlockId::DarkOakFence:
+        case BlockId::OakStairs:
+        case BlockId::SpruceStairs:
+        case BlockId::BirchStairs:
+        case BlockId::JungleStairs:
+        case BlockId::AcaciaStairs:
+        case BlockId::DarkOakStairs:
+            return false;
+        default:
+            return block_info(id).solid;
+    }
+}
 }

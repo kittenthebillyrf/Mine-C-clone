@@ -1560,16 +1560,41 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         for(const auto& dropped:droppedItems)
             DrawCube(Vector3{dropped.x*BLOCK,(dropped.y+0.15f)*BLOCK,dropped.z*BLOCK},
                      0.28f*BLOCK,0.28f*BLOCK,0.28f*BLOCK,color_for(dropped.id));
-        for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x)
-            for(int y=minY;y<=maxY;++y) {
-                const BlockId id=world.get_block(x,y,z);
-                if(id==BlockId::Air) continue;
-                if(blockTexture.id!=0 && is_chunk_mesh_block(id)) continue;
-                if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
-                   world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
-                   world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
-                draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
+        // The greedy mesh already renders every full cube. Visit only the
+        // sparse per-chunk list of special blocks instead of scanning the
+        // entire 3D render-distance volume and performing millions of hash lookups.
+        if(blockTexture.id!=0) {
+            const int firstChunkX=minX/Chunk::Width,lastChunkX=std::max(minX,maxX-1)/Chunk::Width;
+            const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=std::max(minZ,maxZ-1)/Chunk::Depth;
+            for(int cz=firstChunkZ;cz<=lastChunkZ;++cz) for(int cx=firstChunkX;cx<=lastChunkX;++cx) {
+                const auto* chunk=world.find_chunk(cx,cz);
+                if(!chunk) continue;
+                for(const std::size_t index:chunk->special_blocks()) {
+                    const int bx=int(index%Chunk::Width);
+                    const int bz=int((index/Chunk::Width)%Chunk::Depth);
+                    const int by=int(index/(Chunk::Width*Chunk::Depth));
+                    const int x=cx*Chunk::Width+bx,z=cz*Chunk::Depth+bz;
+                    if(by<minY||by>maxY||x<minX||x>=maxX||z<minZ||z>=maxZ) continue;
+                    const BlockId id=chunk->get(bx,by,bz);
+                    if(id==BlockId::Air||is_chunk_mesh_block(id)) continue;
+                    if(world.get_block(x,by+1,z)!=BlockId::Air && world.get_block(x,by+1,z)!=BlockId::Water &&
+                       world.get_block(x+1,by,z)!=BlockId::Air && world.get_block(x-1,by,z)!=BlockId::Air &&
+                       world.get_block(x,by,z+1)!=BlockId::Air && world.get_block(x,by,z-1)!=BlockId::Air) continue;
+                    draw_block(blockModels,world,id,x,by,z,block_center(x,by,z));
+                }
             }
+        } else {
+            // Compatibility fallback for runs where the atlas failed to load.
+            for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x)
+                for(int y=minY;y<=maxY;++y) {
+                    const BlockId id=world.get_block(x,y,z);
+                    if(id==BlockId::Air) continue;
+                    if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
+                       world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
+                       world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
+                    draw_block(blockModels,world,id,x,y,z,block_center(x,y,z));
+                }
+        }
         if(blockTexture.id!=0) {
             const int firstChunkX=minX/Chunk::Width,lastChunkX=std::max(minX,maxX-1)/Chunk::Width;
             const int firstChunkZ=minZ/Chunk::Depth,lastChunkZ=std::max(minZ,maxZ-1)/Chunk::Depth;

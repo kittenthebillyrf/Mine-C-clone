@@ -34,4 +34,6 @@ enum class BlockId : std::uint16_t {
 inline constexpr std::uint16_t BLOCK_ID_COUNT=static_cast<std::uint16_t>(BlockId::Count);
 struct BlockInfo { BlockId id; std::string_view name; bool solid; };
 const BlockInfo& block_info(BlockId id);
+// True for opaque full-cube blocks rendered by the greedy chunk mesher.
+bool is_full_cube_block(BlockId id);
 }

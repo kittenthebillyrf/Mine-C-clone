@@ -1,6 +1,7 @@
 #pragma once
 #include "Block.hpp"
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -29,11 +30,15 @@ public:
     std::size_t state_count() const { return states_.size(); }
     const std::unordered_map<std::size_t,BlockState>& state_entries() const { return states_; }
     const std::vector<std::size_t>& falling_blocks() const { return falling_blocks_; }
+    // Unique positions of non-full-cube blocks; stale entries are filtered on read.
+    const std::vector<std::size_t>& special_blocks() const { return special_blocks_; }
 private:
     static std::size_t index(int x,int y,int z);
     std::array<BlockId,Volume> blocks_{};
     std::unordered_map<std::size_t,BlockState> states_;
     std::vector<std::size_t> falling_blocks_;
+    std::vector<std::size_t> special_blocks_;
+    std::bitset<Volume> special_flags_;
     std::uint64_t revision_=0;
 };
 }
