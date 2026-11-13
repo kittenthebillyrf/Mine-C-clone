@@ -25,7 +25,7 @@ enum class BlockId : std::uint16_t {
     YellowConcrete=86, LimeConcrete=87, PinkConcrete=88, GrayConcrete=89,
     LightGrayConcrete=90, CyanConcrete=91, PurpleConcrete=92, BlueConcrete=93,
     BrownConcrete=94, GreenConcrete=95, RedConcrete=96, BlackConcrete=97,
-    Torch=98, Count=99
+    Torch=98, OakStairs=99, Count=100
 };
 inline constexpr std::uint16_t BLOCK_ID_COUNT=static_cast<std::uint16_t>(BlockId::Count);
 struct BlockInfo { BlockId id; std::string_view name; bool solid; };
