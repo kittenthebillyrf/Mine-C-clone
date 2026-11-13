@@ -272,8 +272,10 @@ void draw_block(Model* models,const mc::world::World& world,mc::world::BlockId i
         const float halfY=upsideDown?-BLOCK*0.25f:BLOCK*0.25f;
         DrawModelEx(plank,Vector3{center.x,center.y+fullY,center.z},
                     Vector3{0,1,0},0.0f,Vector3{1.0f,0.5f,1.0f},WHITE);
+        const Vector3 halfScale=(facing==0 || facing==2)
+            ? Vector3{1.0f,0.5f,0.5f} : Vector3{0.5f,0.5f,1.0f};
         DrawModelEx(plank,Vector3{center.x+upperOffset.x,center.y+halfY,center.z+upperOffset.z},
-                    Vector3{0,1,0},0.0f,Vector3{0.5f,0.5f,0.5f},WHITE);
+                    Vector3{0,1,0},0.0f,halfScale,WHITE);
         return;
     }
     if(id==mc::world::BlockId::Water || id==mc::world::BlockId::Glass || id==mc::world::BlockId::Ice || id==mc::world::BlockId::Lava) {
