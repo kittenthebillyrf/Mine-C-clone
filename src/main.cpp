@@ -193,7 +193,15 @@ bool run_player_physics_self_test() {
     // Stair state changes its collision half, but never permits penetration.
     if(!floorWorld.set_block(6,1,0,BlockId::OakStairs)||
        !floorWorld.set_block_state(6,1,0,mc::world::BlockState{0,0,0,0}))return false;
-    return !mc::physics::player_box_clear(floorWorld,6.5,1.1,0.5);
+    if(mc::physics::player_box_clear(floorWorld,6.5,1.1,0.5))return false;
+    // A grounded player can step onto a half-block without clipping into it.
+    mc::world::World stepWorld;
+    for(int bx=-1;bx<=3;++bx)for(int bz=-1;bz<=1;++bz)
+        if(!stepWorld.set_block(bx,0,bz,BlockId::Stone))return false;
+    if(!stepWorld.set_block(1,1,0,BlockId::OakSlab))return false;
+    x=0.5;y=1.0;z=0.5;dx=1.0;dy=0.0;dz=0.0;
+    if(!mc::physics::move_player(stepWorld,x,y,z,dx,dy,dz,false,true,ch,cv,ground))return false;
+    return x>1.0&&y>=1.49&&ground&&mc::physics::player_box_clear(stepWorld,x,y,z);
 }
 bool run_chunk_mesh_self_test() {
     mc::world::World world;
