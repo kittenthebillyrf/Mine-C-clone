@@ -11,13 +11,16 @@
 #include <fstream>
 #include <string>
 #include <deque>
+#include <utility>
+#include <vector>
 
 namespace mc::render {
 namespace {
 constexpr float BLOCK=2.0f;
 constexpr float PLAYER_HEIGHT=3.6f;
 constexpr float EYE_HEIGHT=3.15f;
-constexpr float REACH=7.0f;
+constexpr float REACH=16.0f; // 8 blocks at the current 2-unit block scale.
+constexpr float MAX_PITCH=1.52f;
 constexpr int HOTBAR_SIZE=9;
 constexpr int INVENTORY_SIZE=36;
 struct ItemStack { mc::world::BlockId id=mc::world::BlockId::Air; int count=0; };
@@ -155,10 +158,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     constexpr int menuRadius=17;
 #endif
     DisableCursor();
-    float px=float(size)*0.5f,pz=float(size)*0.5f;
+    float px=float(size)*0.5f+0.5f,pz=float(size)*0.5f+0.5f;
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
-    float vy=0.0f,yaw=0.0f,pitch=-0.18f;
-    bool grounded=true;
+    float vx=0.0f,vz=0.0f,vy=0.0f,yaw=0.0f,pitch=-0.18f;
+    bool grounded=player_collides(world,px,py-0.05f,pz);
     int selected=0;
     ItemStack inventory[INVENTORY_SIZE]{};
     const BlockId startingItems[5]={BlockId::Grass,BlockId::Dirt,BlockId::Stone,BlockId::Sand,BlockId::Water};
@@ -277,13 +280,13 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
 
         if(captured) {
             const Vector2 md=GetMouseDelta();
-            yaw-=md.x*0.0025f;
-            pitch=std::clamp(pitch+md.y*0.0025f,-1.45f,1.45f);
+            yaw+=md.x*0.0025f;
+            pitch=std::clamp(pitch-md.y*0.0025f,-MAX_PITCH,MAX_PITCH);
             if(gamepad) {
                 const float lookX=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_X);
                 const float lookY=GetGamepadAxisMovement(0,GAMEPAD_AXIS_RIGHT_Y);
-                if(std::abs(lookX)>0.16f) yaw-=lookX*2.2f*controlDt;
-                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch+lookY*2.0f*controlDt,-1.45f,1.45f);
+                if(std::abs(lookX)>0.16f) yaw+=lookX*2.2f*controlDt;
+                if(std::abs(lookY)>0.16f) pitch=std::clamp(pitch-lookY*2.0f*controlDt,-MAX_PITCH,MAX_PITCH);
             }
         }
 
@@ -304,18 +307,27 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(moveLength>1.0f) { mx/=moveLength; mz/=moveLength; }
 
         const float speed=swimming?2.35f:(crouching?2.5f:6.0f);
-        const float dx=mx*speed*controlDt;
-        const float dz=mz*speed*controlDt;
-        const float nextX=std::clamp(px+dx,1.0f,float(size-2));
+        const float targetVX=mx*speed;
+        const float targetVZ=mz*speed;
+        const float response=(moveLength>0.001f)
+            ? (swimming?18.0f:(grounded?42.0f:12.0f))
+            : (grounded?24.0f:3.5f);
+        vx += std::clamp(targetVX-vx,-response*controlDt,response*controlDt);
+        vz += std::clamp(targetVZ-vz,-response*controlDt,response*controlDt);
+
+        // Keep the player centred in a block cell and resolve X/Z separately,
+        // so sliding along walls does not pin the player against corners.
+        const float nextX=std::clamp(px+vx*controlDt,0.5f,float(size)-0.5f);
         if(!player_collides(world,nextX,py,pz)) px=nextX;
         else if(grounded && !player_collides(world,nextX,py+BLOCK*0.6f,pz)) {
             px=nextX; py+=BLOCK*0.6f;
-        }
-        const float nextZ=std::clamp(pz+dz,1.0f,float(size-2));
+        } else vx=0.0f;
+
+        const float nextZ=std::clamp(pz+vz*controlDt,0.5f,float(size)-0.5f);
         if(!player_collides(world,px,py,nextZ)) pz=nextZ;
         else if(grounded && !player_collides(world,px,py+BLOCK*0.6f,nextZ)) {
             pz=nextZ; py+=BLOCK*0.6f;
-        }
+        } else vz=0.0f;
 
         const bool nowSwimming=player_in_water(world,px,py,pz);
         if(captured && grounded &&
@@ -330,7 +342,27 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         vy=std::max(vy,nowSwimming?-8.0f:-55.0f);
         const float nextY=py+vy*controlDt;
         if(player_collides(world,px,nextY,pz)) {
-            if(vy<0.0f) grounded=true;
+            // Resolve the contact instead of leaving the player at the last
+            // arbitrary frame position (the old code caused tiny ground jitter).
+            if(vy<0.0f) {
+                float blocked=nextY, clear=py;
+                for(int i=0;i<10;++i) {
+                    const float mid=(blocked+clear)*0.5f;
+                    if(player_collides(world,px,mid,pz)) blocked=mid;
+                    else clear=mid;
+                }
+                py=clear;
+                grounded=true;
+            } else if(vy>0.0f) {
+                float clear=py, blocked=nextY;
+                for(int i=0;i<10;++i) {
+                    const float mid=(clear+blocked)*0.5f;
+                    if(player_collides(world,px,mid,pz)) blocked=mid;
+                    else clear=mid;
+                }
+                py=clear;
+                grounded=false;
+            }
             vy=0.0f;
         } else {
             py=nextY;
@@ -401,6 +433,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         BeginMode3D(camera);
         const int minX=std::max(0,int(px)-renderRadius),maxX=std::min(size,int(px)+renderRadius+1);
         const int minZ=std::max(0,int(pz)-renderRadius),maxZ=std::min(size,int(pz)+renderRadius+1);
+        std::vector<std::pair<BlockId,Vector3>> transparentBlocks;
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
             const int minY=std::max(0,int(py/BLOCK)-verticalRadius),maxY=std::min(Chunk::Height,int(py/BLOCK)+verticalRadius+2);
             for(int y=minY;y<maxY;++y) {
@@ -409,9 +442,23 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 if(world.get_block(x,y+1,z)!=BlockId::Air && world.get_block(x,y+1,z)!=BlockId::Water &&
                    world.get_block(x+1,y,z)!=BlockId::Air && world.get_block(x-1,y,z)!=BlockId::Air &&
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
-                { const Vector3 center = block_center(x,y,z); if (!draw_textured_block(blockAtlas,id,center)) DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id)); }
+                const Vector3 center=block_center(x,y,z);
+                if(id==BlockId::Water || id==BlockId::Leaves) transparentBlocks.emplace_back(id,center);
+                else if(!draw_textured_block(blockAtlas,id,center)) DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
             }
         }
+        const auto distanceSquared=[&](const Vector3& p) {
+            const float dx=p.x-camera.position.x,dy=p.y-camera.position.y,dz=p.z-camera.position.z;
+            return dx*dx+dy*dy+dz*dz;
+        };
+        std::sort(transparentBlocks.begin(),transparentBlocks.end(),
+            [&](const auto& a,const auto& b){ return distanceSquared(a.second)>distanceSquared(b.second); });
+        BeginBlendMode(BLEND_ALPHA);
+        for(const auto& entry:transparentBlocks) {
+            if(!draw_textured_block(blockAtlas,entry.first,entry.second))
+                DrawCube(entry.second,BLOCK,BLOCK,BLOCK,color_for(entry.first));
+        }
+        EndBlendMode();
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
         DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
