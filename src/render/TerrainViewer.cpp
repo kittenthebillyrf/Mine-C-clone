@@ -315,7 +315,31 @@ std::vector<PlayerAabb> collision_boxes(const mc::world::World& world,const Play
     for(int y=minY;y<=maxY;++y)
         for(int z=minZ;z<=maxZ;++z)
             for(int x=minX;x<=maxX;++x) {
-                if(!is_solid(world.get_block(x,y,z))) continue;
+                const auto id=world.get_block(x,y,z);
+                if(!is_solid(id)) continue;
+                if(is_wood_fence(id)) {
+                    const auto add=[&](PlayerAabb shape) {
+                        if(intersects(shape,query)) boxes.push_back(shape);
+                    };
+                    // Fence posts are 1.5 blocks tall and one quarter-block wide.
+                    add({double(x)+0.375,double(y),double(z)+0.375,
+                         double(x)+0.625,double(y)+1.5,double(z)+0.625});
+                    const bool north=fence_connects_to(world.get_block(x,y,z-1));
+                    const bool south=fence_connects_to(world.get_block(x,y,z+1));
+                    const bool west=fence_connects_to(world.get_block(x-1,y,z));
+                    const bool east=fence_connects_to(world.get_block(x+1,y,z));
+                    for(const auto [low,high] : {std::pair{0.375,0.9375},std::pair{1.0,1.5}}) {
+                        if(west) add({double(x),double(y)+low,double(z)+0.375,
+                                      double(x)+0.5,double(y)+high,double(z)+0.625});
+                        if(east) add({double(x)+0.5,double(y)+low,double(z)+0.375,
+                                      double(x+1),double(y)+high,double(z)+0.625});
+                        if(north) add({double(x)+0.375,double(y)+low,double(z),
+                                       double(x)+0.625,double(y)+high,double(z)+0.5});
+                        if(south) add({double(x)+0.375,double(y)+low,double(z)+0.5,
+                                       double(x)+0.625,double(y)+high,double(z+1)});
+                    }
+                    continue;
+                }
                 const PlayerAabb block{double(x),double(y),double(z),double(x+1),double(y+1),double(z+1)};
                 if(intersects(block,query)) boxes.push_back(block);
             }
