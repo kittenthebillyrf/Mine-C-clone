@@ -6,55 +6,66 @@
 #include <vector>
 
 namespace mc::render {
-inline std::vector<unsigned char> decode_block_atlas_base64() {
-    static constexpr char encoded[] = R"ATLAS(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)ATLAS";
-    auto value = [](unsigned char c) -> int {
-        if (c >= 'A' && c <= 'Z') return c - 'A';
-        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-        if (c >= '0' && c <= '9') return c - '0' + 52;
-        if (c == '+') return 62;
-        if (c == '/') return 63;
-        return -1;
+inline Image make_block_atlas_image() {
+    Image image=GenImageColor(64,64,Color{0,0,0,255});
+    auto put=[&](int tile,int x,int y,Color c) { ImageDrawPixel(&image,(tile%4)*16+x,(tile/4)*16+y,c); };
+    auto noise=[](int tile,int x,int y)->int {
+        unsigned v=static_cast<unsigned>(tile*73856093u)^static_cast<unsigned>(x*19349663u)^static_cast<unsigned>(y*83492791u);
+        v^=v>>13; v*=1274126177u; v^=v>>16;
+        return int(v%25u)-12;
     };
-    std::vector<unsigned char> out;
-    int bits = 0, accumulator = 0;
-    for (unsigned char c : encoded) {
-        if (c == '=') break;
-        const int v = value(c);
-        if (v < 0) continue;
-        accumulator = (accumulator << 6) | v;
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<unsigned char>((accumulator >> bits) & 0xff));
-        }
+    const Color base[16]={
+        {134,93,58,255}, {105,174,65,255}, {119,82,48,255}, {58,133,53,255},
+        {126,128,132,255}, {218,204,151,255}, {48,111,191,190}, {61,61,64,255},
+        {125,87,49,255}, {157,116,69,255}, {133,130,124,255}, {83,83,86,255},
+        {190,143,112,255}, {174,132,78,255}, {173,133,83,255}, {148,102,58,255}
+    };
+    for(int tile=0;tile<16;++tile) for(int y=0;y<16;++y) for(int x=0;x<16;++x) {
+        Color c=base[tile]; const int n=noise(tile,x,y);
+        c.r=static_cast<unsigned char>(std::clamp(int(c.r)+n,0,255));
+        c.g=static_cast<unsigned char>(std::clamp(int(c.g)+n,0,255));
+        c.b=static_cast<unsigned char>(std::clamp(int(c.b)+n,0,255));
+        if(tile==1 && (x==0||y==0||x==15||y==15)) c=Color{91,153,52,255};
+        if(tile==2 && y<3) c=Color{92,153,54,255};
+        if(tile==2 && y>=3) c=Color{132,91,55,255};
+        if(tile==3 && ((x*7+y*11)%13<4)) c=Color{42,111,44,255};
+        if(tile==6) { c.a=190; if((x+y)%7==0) c=Color{103,164,218,185}; }
+        if(tile==8 && (x%4==0||y%4==0)) c=Color{91,62,39,255};
+        if(tile==9 && (x%5==0||y%5==0)) c=Color{111,75,44,255};
+        if(tile==10 && (x+y)%9==0) c=Color{179,176,166,255};
+        if(tile==11 && (x*3+y*5)%17<4) c=Color{39,39,42,255};
+        if(tile==12 && (x*5+y*3)%19<4) c=Color{224,158,115,255};
+        if(tile==13 && (y%4==0)) c=Color{139,99,63,255};
+        if(tile==14 && (x%4==0||y%4==0)) c=Color{124,87,55,255};
+        if(tile==15 && (x<3||x>12||y<3||y>12)) c=Color{91,59,35,255};
+        put(tile,x,y,c);
     }
-    return out;
+    return image;
 }
 inline int block_atlas_tile(mc::world::BlockId id) {
     using mc::world::BlockId;
-    switch (id) {
-        case BlockId::Stone: return 5;
-        case BlockId::Grass: return 1;
-        case BlockId::Dirt: return 0;
-        case BlockId::Sand: return 6;
-        case BlockId::Water: return 7;
-        case BlockId::Bedrock: return 8;
-        case BlockId::Wood: return 3;
-        case BlockId::Leaves: return 2;
-        case BlockId::Gravel: return 9;
-        case BlockId::CoalOre: return 10;
-        case BlockId::IronOre: return 11;
-        case BlockId::Planks: return 12;
-        case BlockId::Stick: return 13;
-        case BlockId::CraftingTable: return 14;
-        default: return 0;
+    switch(id) {
+        case BlockId::Stone:return 4;
+        case BlockId::Grass:return 2;
+        case BlockId::Dirt:return 0;
+        case BlockId::Sand:return 5;
+        case BlockId::Water:return 6;
+        case BlockId::Bedrock:return 7;
+        case BlockId::Wood:return 8;
+        case BlockId::Leaves:return 3;
+        case BlockId::Gravel:return 10;
+        case BlockId::CoalOre:return 11;
+        case BlockId::IronOre:return 12;
+        case BlockId::Planks:return 13;
+        case BlockId::Stick:return 14;
+        case BlockId::CraftingTable:return 15;
+        default:return 0;
     }
 }
 struct BlockAtlasAssets {
     Texture2D texture{};
     Material material{};
-    Mesh meshes[15]{};
+    Mesh meshes[16]{};
 };
 
 // Build a cube with independent UVs for every face. The previous implementation
@@ -124,20 +135,19 @@ inline BlockAtlasAssets& load_block_atlas() {
     static bool attempted = false;
     if (!attempted) {
         attempted = true;
-        const auto bytes = decode_block_atlas_base64();
-        Image image = LoadImageFromMemory(".png", bytes.data(), static_cast<int>(bytes.size()));
-        if (image.data != nullptr) {
-            assets.texture = LoadTextureFromImage(image);
-            const bool validAtlas = image.width == 64 && image.height == 64;
+        Image image=make_block_atlas_image();
+        if(image.data!=nullptr) {
+            assets.texture=LoadTextureFromImage(image);
+            const bool validAtlas=image.width==64&&image.height==64;
             UnloadImage(image);
-            if (validAtlas && assets.texture.id != 0) {
+            if(validAtlas&&assets.texture.id!=0) {
                 SetTextureFilter(assets.texture, TEXTURE_FILTER_POINT);
                 assets.material = LoadMaterialDefault();
                 SetMaterialTexture(&assets.material, MATERIAL_MAP_DIFFUSE, assets.texture);
-                for (int tile = 0; tile < 15; ++tile) {
-                    const int topTile = tile;
-                    const int bottomTile = (tile == 1) ? 0 : tile; // Grass bottom = dirt.
-                    assets.meshes[tile] = make_block_mesh(tile, topTile, bottomTile);
+                for(int tile=0;tile<16;++tile) {
+                    int side=tile,top=tile,bottom=tile;
+                    if(tile==2) { side=2; top=1; bottom=0; }
+                    assets.meshes[tile]=make_block_mesh(side,top,bottom);
                 }
             } else if (assets.texture.id != 0) {
                 UnloadTexture(assets.texture);
