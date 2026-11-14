@@ -1,5 +1,6 @@
 #include "i18n/Localization.hpp"
 #include "world/World.hpp"
+#include "world/generation/ChunkGenerator.hpp"
 #include "render/TerrainViewer.hpp"
 
 #include <algorithm>
@@ -7,37 +8,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
-std::uint32_t hash2(int x, int z, std::uint32_t seed) {
-    std::uint32_t h = seed ^ (std::uint32_t(x) * 0x8da6b343u) ^ (std::uint32_t(z) * 0xd8163841u);
-    h ^= h >> 13; h *= 0x85ebca6bu; h ^= h >> 16; h *= 0xc2b2ae35u; h ^= h >> 16;
-    return h;
-}
-double fade(double t) { return t*t*t*(t*(t*6.0-15.0)+10.0); }
-double lerp(double a,double b,double t) { return a+(b-a)*t; }
-double lattice(int x,int z,std::uint32_t seed) {
-    return (double(hash2(x,z,seed))/double(UINT32_MAX))*2.0-1.0;
-}
-double noise(double x,double z,std::uint32_t seed) {
-    const int ix=int(std::floor(x)), iz=int(std::floor(z));
-    const double fx=fade(x-ix), fz=fade(z-iz);
-    return lerp(lerp(lattice(ix,iz,seed),lattice(ix+1,iz,seed),fx),
-                lerp(lattice(ix,iz+1,seed),lattice(ix+1,iz+1,seed),fx),fz);
-}
-double terrain(int x,int z,std::uint32_t seed) {
-    double n=0.0, amp=1.0, freq=0.012, total=0.0;
-    for(int octave=0;octave<5;++octave) {
-        n += noise(x*freq,z*freq,seed+std::uint32_t(octave)*1013u)*amp;
-        total += amp; amp *= 0.5; freq *= 2.0;
-    }
-    const double continental=noise(x*0.003,z*0.003,seed^0x9e3779b9u);
-    return std::clamp(62.0 + (n/total)*25.0 + continental*13.0, 4.0, 120.0);
-}
 std::string replace_all(std::string value, const std::string& token, const std::string& replacement) {
     std::size_t pos=0;
     while((pos=value.find(token,pos))!=std::string::npos) {
@@ -63,7 +40,33 @@ bool run_world_self_test() {
     if(restored.chunk_count()!=2 ||
        restored.get_block(0,10,0)!=mc::world::BlockId::Stone ||
        restored.get_block(-1,20,-17)!=mc::world::BlockId::Grass) return false;
-    return mc::world::block_info(mc::world::BlockId::Stone).solid;
+
+    // Verify disk-backed chunk eviction and restoration without retaining RAM copies.
+    const std::string chunkDir="world_chunk_self_test";
+    std::error_code fileError;
+    std::filesystem::remove_all(chunkDir,fileError);
+    if(!restored.save_chunk_file(0,0,chunkDir)) return false;
+    if(!restored.unload_chunk(0,0) || restored.find_chunk(0,0)!=nullptr) return false;
+    if(!restored.load_chunk_file(0,0,chunkDir)) return false;
+    if(restored.get_block(0,10,0)!=mc::world::BlockId::Stone) return false;
+    std::filesystem::remove_all(chunkDir,fileError);
+    if(!mc::world::block_info(mc::world::BlockId::Stone).solid) return false;
+    if(!mc::world::block_info(mc::world::BlockId::Planks).solid) return false;
+    if(mc::world::block_info(mc::world::BlockId::Stick).solid) return false;
+    if(!mc::world::block_info(mc::world::BlockId::CraftingTable).solid) return false;
+
+    const mc::world::generation::ChunkGenerator generator(1122);
+    const auto column=generator.sample(0,0);
+    if(column.height<5||column.height>205) return false;
+    if(generator.sample(0,0).height!=column.height) return false;
+    const mc::world::generation::ChunkGenerator otherSeed(1123);
+    if(otherSeed.sample(0,0).height==column.height && otherSeed.sample(37,-19).height==generator.sample(37,-19).height) return false;
+    mc::world::World generated;
+    generator.generate_chunk(generated,0,0);
+    if(generated.get_block(0,0,0)!=mc::world::BlockId::Bedrock) return false;
+    const auto surface=generated.get_block(0,column.height,0);
+    if(surface!=mc::world::BlockId::Grass&&surface!=mc::world::BlockId::Sand&&surface!=mc::world::BlockId::Gravel) return false;
+    return true;
 }
 }
 int main(int argc,char** argv) {
@@ -72,7 +75,7 @@ int main(int argc,char** argv) {
     bool self_test=false, open_3d=false, export_map=false;
     for(int i=1;i<argc;++i) {
         const std::string a=argv[i];
-        if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,2048);
+        if(a=="--size" && i+1<argc) size=std::clamp(std::atoi(argv[++i]),16,4096);
         else if(a=="--seed" && i+1<argc) seed=std::uint32_t(std::strtoul(argv[++i],nullptr,10));
         else if(a=="--output" && i+1<argc) output=argv[++i];
         else if(a=="--lang" && i+1<argc) language=argv[++i];
@@ -97,17 +100,21 @@ int main(int argc,char** argv) {
         return 0;
     }
     if(open_3d || !export_map) return mc::render::run_terrain_viewer(size,seed);
-    std::vector<double> heights(std::size_t(size)*size);
-    for(int z=0;z<size;++z) for(int x=0;x<size;++x) heights[std::size_t(z)*size+x]=terrain(x,z,seed);
+    mc::world::generation::ChunkGenerator generator(seed);
     std::ofstream out(output,std::ios::binary);
     if(!out) { std::cerr<<mc::i18n::text("error.output",language)<<output<<"\n"; return 1; }
     out<<"P6\n"<<size<<" "<<size<<"\n255\n";
-    for(double h:heights) {
+    for(int z=0;z<size;++z) for(int x=0;x<size;++x) {
+        const auto column=generator.sample(x,z);
         unsigned char rgb[3];
-        if(h<53) { rgb[0]=35; rgb[1]=75; rgb[2]=150; }
-        else if(h<69) { rgb[0]=194; rgb[1]=178; rgb[2]=128; }
-        else if(h<91) { rgb[0]=65; rgb[1]=145; rgb[2]=62; }
-        else { rgb[0]=135; rgb[1]=135; rgb[2]=140; }
+        using mc::world::generation::Biome;
+        if(column.height<62) { rgb[0]=35; rgb[1]=75; rgb[2]=150; }
+        else if(column.biome==Biome::Desert||column.biome==Biome::IceDesert||column.biome==Biome::Savanna) { rgb[0]=210; rgb[1]=190; rgb[2]=125; }
+        else if(column.biome==Biome::Tundra||column.height>145) { rgb[0]=175; rgb[1]=180; rgb[2]=185; }
+        else if(column.biome==Biome::Swamp) { rgb[0]=65; rgb[1]=105; rgb[2]=55; }
+        else if(column.biome==Biome::Forest||column.biome==Biome::Taiga||column.biome==Biome::SeasonalForest||column.biome==Biome::Rainforest) { rgb[0]=45; rgb[1]=125; rgb[2]=58; }
+        else if(column.biome==Biome::Shrubland) { rgb[0]=135; rgb[1]=145; rgb[2]=85; }
+        else { rgb[0]=90; rgb[1]=165; rgb[2]=70; }
         out.write(reinterpret_cast<char*>(rgb),3);
     }
     std::string message=mc::i18n::text("terrain.generated",language);

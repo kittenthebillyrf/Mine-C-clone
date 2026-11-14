@@ -1,0 +1,99 @@
+name: Desktop EXE and Nintendo Switch NRO
+
+on:
+  push:
+    branches: [worldgen-pe-java112]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    name: Build Windows x64 EXE
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Prepare verified Windows package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build/Release/MineCppClone.exe dist/MineCppClone.exe
+          $hash = (Get-FileHash dist/MineCppClone.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path dist/SHA256SUMS.txt -Value "$hash  MineCppClone.exe" -Encoding ascii
+          @(
+            "MineCppClone - Windows x64",
+            "",
+            "This executable is built from this GitHub repository by GitHub Actions.",
+            "It does not request administrator privileges.",
+            "SHA-256 is recorded in SHA256SUMS.txt. Verify the file before running it.",
+            "The executable is currently unsigned. Windows SmartScreen may show an unknown-publisher warning.",
+            "A trusted code-signing certificate is required to remove the unknown-publisher warning; this package does not bypass Windows security."
+          ) | Set-Content -Path dist/README-SAFETY.txt -Encoding utf8
+          Compress-Archive -Path dist/* -DestinationPath MineCppClone-Windows-x64.zip -Force
+      - name: Upload verified Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCppClone-Windows-x64-verified
+          path: |
+            MineCppClone-Windows-x64.zip
+            dist/MineCppClone.exe
+            dist/SHA256SUMS.txt
+            dist/README-SAFETY.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  switch-nro:
+    name: Build Nintendo Switch NRO
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:latest
+    env:
+      DEVKITPRO: /opt/devkitpro
+      DEVKITA64: /opt/devkitpro/devkitA64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Switch graphics libraries and image tooling
+        run: |
+          dkp-pacman -Sy --noconfirm switch-dev switch-mesa switch-glad switch-libdrm_nouveau switch-tools python python-pillow
+      - name: Generate Switch HOME Menu icon
+        run: |
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw
+          im=Image.new("RGB",(256,256),(8,24,48))
+          d=ImageDraw.Draw(im)
+          d.polygon([(32,82),(128,30),(224,82),(128,135)],fill=(104,183,62))
+          d.polygon([(32,82),(128,135),(128,225),(32,170)],fill=(103,68,43))
+          d.polygon([(128,135),(224,82),(224,170),(128,225)],fill=(145,94,54))
+          im.save("icon.jpg",quality=92)
+          PY
+      - name: Fetch raylib Nintendo Switch backend
+        run: |
+          git clone https://github.com/luizpestana/raylib-nx.git raylib-nx
+          git -C raylib-nx checkout 9978e718cc92c4cf2548c3c20cb5ebb62a7e9b5e
+      - name: Build raylib for Nintendo Switch
+        run: make -C raylib-nx/src PLATFORM=PLATFORM_NX -j2
+      - name: Build NRO
+        run: RAYLIB_NX="$GITHUB_WORKSPACE/raylib-nx" make -j2
+      - name: Verify NRO output
+        run: |
+          test -s MineCppClone.nro
+          bytes=$(wc -c < MineCppClone.nro)
+          echo "NRO verified: ${bytes} bytes"
+      - name: Upload NRO
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCppClone-Nintendo-Switch
+          path: |
+            MineCppClone.nro
+            MineCppClone.nacp
+          if-no-files-found: error
+          retention-days: 14
