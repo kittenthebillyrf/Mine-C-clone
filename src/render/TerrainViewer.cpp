@@ -302,8 +302,11 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     bool pauseOptionsOpen=false;
     int pauseSelection=0;
     float cameraFov=70.0f;
+    int settingsSelection=0;
     bool showDeviceProfile=true;
     float hotbarChangeCooldown=0.0f;
+    { std::ifstream cfg("settings.cfg"); if(cfg) { float savedFov=70.0f; int savedDistance=deviceProfile.recommendedChunks; if(cfg>>savedFov>>savedDistance) { cameraFov=std::clamp(savedFov,50.0f,100.0f); renderDistanceChunks=std::clamp(savedDistance,1,deviceProfile.maxChunks); } } }
+    const auto save_settings=[&]() { std::ofstream cfg("settings.cfg",std::ios::trunc); if(cfg) cfg<<cameraFov<<" "<<renderDistanceChunks<<"\\n"; };
     bool thirdPerson=false;
     bool captured=true;
     bool inMenu=true;
@@ -469,21 +472,25 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const Rectangle renderPlus{float(cx+98),float(cy+5),52,44};
                 const int maxRenderDistance=deviceProfile.maxChunks;
                 const Vector2 mouse=GetMousePosition();
-                if(back) { pauseOptionsOpen=false; pauseSelection=0; }
-                if(up) cameraFov=std::min(100.0f,cameraFov+2.0f);
-                if(down) cameraFov=std::max(50.0f,cameraFov-2.0f);
-                if(IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT))) renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1);
-                if(IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT))) renderDistanceChunks=std::max(1,renderDistanceChunks-1);
-                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    if(CheckCollisionPointRec(mouse,minus)) cameraFov=std::max(50.0f,cameraFov-2.0f);
-                    if(CheckCollisionPointRec(mouse,plus)) cameraFov=std::min(100.0f,cameraFov+2.0f);
-                    if(CheckCollisionPointRec(mouse,renderMinus)) renderDistanceChunks=std::max(1,renderDistanceChunks-1);
-                    if(CheckCollisionPointRec(mouse,renderPlus)) renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1);
-                    if(CheckCollisionPointRec(mouse,Rectangle{float(cx-150),float(cy+115),300,44})) { pauseOptionsOpen=false; pauseSelection=0; }
+                if(back) { save_settings(); pauseOptionsOpen=false; pauseSelection=0; settingsSelection=0; }
+                if(up||down) settingsSelection=1-settingsSelection;
+                const bool adjustRight=IsKeyPressed(KEY_RIGHT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_RIGHT));
+                const bool adjustLeft=IsKeyPressed(KEY_LEFT)||(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_FACE_LEFT));
+                if(adjustRight||adjustLeft) {
+                    const int step=adjustRight?1:-1;
+                    if(settingsSelection==0) cameraFov=std::clamp(cameraFov+float(step)*2.0f,50.0f,100.0f);
+                    else renderDistanceChunks=std::clamp(renderDistanceChunks+step,1,maxRenderDistance);
                 }
-                if(accept) { pauseOptionsOpen=false; pauseSelection=0; }
-                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)) renderDistanceChunks=std::max(1,renderDistanceChunks-1);
-                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1);
+                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    if(CheckCollisionPointRec(mouse,minus)) { settingsSelection=0; cameraFov=std::max(50.0f,cameraFov-2.0f); }
+                    if(CheckCollisionPointRec(mouse,plus)) { settingsSelection=0; cameraFov=std::min(100.0f,cameraFov+2.0f); }
+                    if(CheckCollisionPointRec(mouse,renderMinus)) { settingsSelection=1; renderDistanceChunks=std::max(1,renderDistanceChunks-1); }
+                    if(CheckCollisionPointRec(mouse,renderPlus)) { settingsSelection=1; renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1); }
+                    if(CheckCollisionPointRec(mouse,Rectangle{float(cx-150),float(cy+115),300,44})) { save_settings(); pauseOptionsOpen=false; pauseSelection=0; settingsSelection=0; }
+                }
+                if(accept) { save_settings(); pauseOptionsOpen=false; pauseSelection=0; settingsSelection=0; }
+                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_LEFT_TRIGGER_1)) { settingsSelection=1; renderDistanceChunks=std::max(1,renderDistanceChunks-1); }
+                if(gamepad&&IsGamepadButtonPressed(0,GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) { settingsSelection=1; renderDistanceChunks=std::min(maxRenderDistance,renderDistanceChunks+1); }
             } else {
                 if(up) pauseSelection=(pauseSelection+2)%3;
                 if(down) pauseSelection=(pauseSelection+1)%3;
@@ -830,10 +837,12 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                 const int cx=GetScreenWidth()/2,cy=GetScreenHeight()/2;
                 DrawText("SETTINGS",cx-82,cy-155,28,YELLOW);
                 DrawText(TextFormat("Field of view: %.0f",cameraFov),cx-95,cy-42,21,RAYWHITE);
+                DrawRectangleLines(cx-205,cy-49,410,38,settingsSelection==0?YELLOW:Color{65,65,65,255});
                 DrawRectangle(cx-150,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy-55,52,44,RAYWHITE); DrawText("-",cx-132,cy-51,30,RAYWHITE);
                 DrawRectangle(cx+98,cy-55,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy-55,52,44,RAYWHITE); DrawText("+",cx+113,cy-51,30,RAYWHITE);
                 DrawText("FOV",cx-205,cy-42,18,LIGHTGRAY);
                 DrawText(TextFormat("Render distance: %i chunks",renderDistanceChunks),cx-145,cy+14,19,RAYWHITE);
+                DrawRectangleLines(cx-205,cy+8,410,38,settingsSelection==1?YELLOW:Color{65,65,65,255});
                 DrawRectangle(cx-150,cy+5,52,44,Color{65,65,65,250}); DrawRectangleLines(cx-150,cy+5,52,44,RAYWHITE); DrawText("-",cx-132,cy+9,30,RAYWHITE);
                 DrawRectangle(cx+98,cy+5,52,44,Color{65,65,65,250}); DrawRectangleLines(cx+98,cy+5,52,44,RAYWHITE); DrawText("+",cx+113,cy+9,30,RAYWHITE);
                 DrawText("LEFT / RIGHT or L1 / R1: render distance",cx-200,cy+58,15,LIGHTGRAY);
