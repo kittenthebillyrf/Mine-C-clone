@@ -766,6 +766,7 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const int minX=std::max(0,int(px)-renderRadiusBlocks),maxX=std::min(size,int(px)+renderRadiusBlocks+1);
         const int minZ=std::max(0,int(pz)-renderRadiusBlocks),maxZ=std::min(size,int(pz)+renderRadiusBlocks+1);
         std::vector<std::pair<BlockId,Vector3>> transparentBlocks;
+        std::vector<Matrix> solidInstances[16];
         for(int z=minZ;z<maxZ;++z) for(int x=minX;x<maxX;++x) {
             const int minY=std::max(0,int(py/BLOCK)-verticalRadius),maxY=std::min(Chunk::Height,int(py/BLOCK)+verticalRadius+2);
             for(int y=minY;y<maxY;++y) {
@@ -776,8 +777,19 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
                    world.get_block(x,y,z+1)!=BlockId::Air && world.get_block(x,y,z-1)!=BlockId::Air) continue;
                 const Vector3 center=block_center(x,y,z);
                 if(id==BlockId::Water) transparentBlocks.emplace_back(id,center);
-                else if(!draw_textured_block(blockAtlas,id,center)) DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
+                else {
+                    const int tile=block_atlas_tile(id);
+                    if(tile>=0&&tile<16&&blockAtlas.meshes[tile].vertexCount>0)
+                        solidInstances[tile].push_back(MatrixTranslate(center.x,center.y,center.z));
+                    else DrawCube(center,BLOCK,BLOCK,BLOCK,color_for(id));
+                }
             }
+        }
+        // Submit one instanced draw per block material instead of one GPU draw per cube.
+        for(int tile=0;tile<16;++tile) {
+            auto& transforms=solidInstances[tile];
+            if(!transforms.empty())
+                DrawMeshInstanced(blockAtlas.meshes[tile],blockAtlas.material,transforms.data(),static_cast<int>(transforms.size()));
         }
         const auto distanceSquared=[&](const Vector3& p) {
             const float dx=p.x-camera.position.x,dy=p.y-camera.position.y,dz=p.z-camera.position.z;
