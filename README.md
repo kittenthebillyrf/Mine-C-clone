@@ -33,13 +33,27 @@ The generator follows broad architectural ideas visible in the supplied Pocket E
 
 ## Controls
 
+### Keyboard and mouse
 - WASD — move; mouse — look
 - Space — jump; Left Shift — crouch
 - Left mouse — break the targeted block
 - Right mouse — place a block from the selected stack
 - 1–9 / mouse wheel — select hotbar slot
-- E — open/close inventory
+- E — inventory; C — crafting panel; R — creative panel
 - Escape — pause / release mouse
+
+### Nintendo Switch
+- Left stick — move; right stick — look
+- A — jump / confirm
+- B — back / cancel
+- X — inventory
+- Y — crafting panel
+- Plus — pause menu
+- D-pad — navigate menus; L/R — change hotbar slot
+- ZR — break; ZL — place
+- HOME Menu icon is generated from `assets/switch/icon.svg` during the NRO workflow.
+
+The game detects its compile-time target platform and offers a recommended performance profile on startup. Render distance is configured in chunks in Pause → Settings and saved to `settings.cfg`. The recommendation is a starting point; real hardware performance still needs to be measured.
 
 ## Implemented prototype systems
 
