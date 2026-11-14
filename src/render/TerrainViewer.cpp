@@ -157,6 +157,23 @@ bool player_supported(const mc::world::World& world,float px,float feetY,float p
     return player_collides(world,px,feetY-0.035f,pz);
 }
 
+// Sneaking players stop at unsupported edges instead of walking off a block.
+float safe_sneak_delta(const mc::world::World& world,float px,float feetY,float pz,
+                       float delta,int axis) {
+    if(std::abs(delta)<0.000001f) return 0.0f;
+    const int steps=std::max(1,int(std::ceil(std::abs(delta)/0.05f)));
+    const float part=delta/float(steps);
+    float moved=0.0f;
+    for(int i=0;i<steps;++i) {
+        const float nx=px+(axis==0?part/BLOCK:0.0f);
+        const float nz=pz+(axis==2?part/BLOCK:0.0f);
+        if(!player_supported(world,nx,feetY,nz)) break;
+        moved+=part;
+        px=nx; pz=nz;
+    }
+    return moved;
+}
+
 bool player_in_water(const mc::world::World& world,float px,float feetY,float pz) {
     constexpr float radius=0.28f*BLOCK;
     constexpr float height=1.75f*BLOCK;
@@ -612,9 +629,15 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             vx*=drag; vz*=drag;
         }
 
+        // Sneaking edge protection: constrain each horizontal axis to the
+        // last position whose feet still have a solid block underneath.
+        float dx=vx*controlDt, dz=vz*controlDt;
+        if(crouching && grounded) {
+            dx=safe_sneak_delta(world,px,py,pz,dx,0);
+            dz=safe_sneak_delta(world,px+dx/BLOCK,py,pz,dz,2);
+        }
         // Resolve horizontal movement with swept AABB checks. Try the vanilla
         // 0.6-block step only when grounded; otherwise slide independently.
-        const float dx=vx*controlDt, dz=vz*controlDt;
         const float oldX=px,oldZ=pz,oldY=py;
         float movedX=sweep_player_axis(world,px,py,pz,dx,0,float(size));
         if(std::abs(movedX-dx)>0.0001f) {
@@ -643,16 +666,27 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const bool nowSwimming=player_in_water(world,px,py,pz);
         // Vanilla 1.12 jump impulse is 0.42 blocks/tick; convert to the
         // viewer's world-units/second and retain the renderer's 2-unit blocks.
-        if(captured && grounded &&
-           (IsKeyPressed(KEY_SPACE)||(gamepad&&button_a()))) {
+        const bool jumpPressed=captured &&
+            (IsKeyPressed(KEY_SPACE)||(gamepad&&button_a()));
+        if(jumpPressed && (grounded||nowSwimming)) {
             vy=nowSwimming?2.4f:25.2f;
+            // EntityLivingBase.jump(): sprinting adds a 0.2-block/tick
+            // horizontal impulse in the current yaw direction.
+            if(grounded && sprinting) {
+                vx+=std::sin(yaw)*4.0f;
+                vz-=std::cos(yaw)*4.0f;
+            }
             grounded=false;
         }
-        const float gravity=nowSwimming?4.8f:23.52f; // 0.08 blocks/tick^2
+        const float gravity=nowSwimming?4.8f:23.52f;
         vy-=gravity*controlDt;
         if(nowSwimming && captured && IsKeyDown(KEY_SPACE))
-            vy=std::min(vy+7.2f*controlDt,3.0f);
+            vy+=1.6f*controlDt; // Java handleJumpWater: +0.04 block/tick.
         vy=std::max(vy,nowSwimming?-4.0f:-55.0f);
+        if(nowSwimming) {
+            const float waterDrag=std::pow(0.8f,controlDt*20.0f);
+            vx*=waterDrag; vz*=waterDrag; vy*=waterDrag;
+        }
         const float requestedY=vy*controlDt;
         const float movedY=sweep_player_axis(world,px,py,pz,requestedY,1,float(size));
         if(std::abs(movedY-requestedY)>0.0001f) {
