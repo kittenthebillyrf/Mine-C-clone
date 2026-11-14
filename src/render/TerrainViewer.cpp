@@ -329,6 +329,9 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
     float py=float(surface_y(world,int(px),int(pz)))*BLOCK;
     float vx=0.0f,vz=0.0f,vy=0.0f,yaw=0.0f,pitch=-0.18f;
     bool grounded=player_collides(world,px,py-0.05f,pz);
+    const float spawnX=px,spawnZ=pz,spawnY=py;
+    float fallDistance=0.0f;
+    int health=20;
     int selected=0;
     int miningX=-1,miningY=-1,miningZ=-1;
     float miningProgress=0.0f;
@@ -687,8 +690,10 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             const float waterDrag=std::pow(0.8f,controlDt*20.0f);
             vx*=waterDrag; vz*=waterDrag; vy*=waterDrag;
         }
+        const bool wasGrounded=grounded;
         const float requestedY=vy*controlDt;
         const float movedY=sweep_player_axis(world,px,py,pz,requestedY,1,float(size));
+        if(!nowSwimming && requestedY<0.0f) fallDistance+=-movedY;
         if(std::abs(movedY-requestedY)>0.0001f) {
             if(vy<0.0f) grounded=true;
             vy=0.0f;
@@ -700,6 +705,22 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
             if(vy<0.0f) vy=0.0f;
         }
         if(py<0.0f) { py=0.0f; vy=0.0f; grounded=true; }
+        if(nowSwimming) fallDistance=0.0f;
+        if(!wasGrounded && grounded) {
+            // Java-style fall damage: no damage for the first three blocks,
+            // then one health point per additional block (rounded upward).
+            const int fallDamage=std::max(0,int(std::ceil(fallDistance/BLOCK-3.0f)));
+            if(fallDamage>0) health=std::max(0,health-fallDamage);
+            fallDistance=0.0f;
+            if(health<=0) {
+                // Minimal survival respawn until beds and spawn-point data exist.
+                px=spawnX; py=spawnY; pz=spawnZ;
+                vx=0.0f; vy=0.0f; vz=0.0f;
+                health=20; grounded=true;
+            }
+        } else if(grounded) {
+            fallDistance=0.0f;
+        }
 
         if(captured) {
             for(int i=0;i<HOTBAR_SIZE;++i) if(IsKeyPressed(KEY_ONE+i)) selected=i;
@@ -881,7 +902,8 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         }
         EndMode3D();
         DrawRectangle(0,0,GetScreenWidth(),38,Fade(BLACK,0.35f));
-        DrawText("MINE C++ CLONE  |  SURVIVAL TEST",14,10,18,RAYWHITE);
+        DrawText("MINE C++ CLONE  |  SURVIVAL",14,10,18,RAYWHITE);
+        DrawText(TextFormat("HEALTH: %i / 20",health),GetScreenWidth()-190,10,18,health>6?RAYWHITE:Color{255,90,90,255});
         DrawText("World autosaves to world.mcc when you exit",14,48,14,RAYWHITE);
         DrawText("Move: WASD / left stick | Jump: SPACE / A | Break: ZR | Place: ZL | X: Inventory | Y: Crafting | Plus: Pause",14,GetScreenHeight()-28,13,RAYWHITE);
         if(miningProgress>0.0f) {
