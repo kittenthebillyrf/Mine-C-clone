@@ -61,8 +61,13 @@ jobs:
       DEVKITA64: /opt/devkitpro/devkitA64
     steps:
       - uses: actions/checkout@v4
-      - name: Install Switch graphics libraries
-        run: dkp-pacman -Sy --noconfirm switch-dev switch-mesa switch-glad switch-libdrm_nouveau switch-tools
+      - name: Install Switch graphics libraries and icon converter
+        run: |
+          dkp-pacman -Sy --noconfirm switch-dev switch-mesa switch-glad switch-libdrm_nouveau switch-tools
+          apt-get update
+          apt-get install -y imagemagick
+      - name: Generate Switch HOME Menu icon
+        run: convert assets/switch/icon.svg -resize 256x256 -background '#07172f' -alpha remove -alpha off -quality 92 icon.jpg
       - name: Fetch raylib Nintendo Switch backend
         run: |
           git clone https://github.com/luizpestana/raylib-nx.git raylib-nx
