@@ -569,14 +569,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float moveLength=std::sqrt(mx*mx+mz*mz);
         if(moveLength>1.0f) { mx/=moveLength; mz/=moveLength; }
 
-        const float speed=swimming?2.35f:(crouching?2.5f:6.0f);
-        const float targetVX=mx*speed;
-        const float targetVZ=mz*speed;
-        const float response=(moveLength>0.001f)
-            ? (swimming?18.0f:(grounded?42.0f:12.0f))
-            : (grounded?24.0f:3.5f);
-        vx += std::clamp(targetVX-vx,-response*controlDt,response*controlDt);
-        vz += std::clamp(targetVZ-vz,-response*controlDt,response*controlDt);
+        // Java 1.12 EntityLivingBase.travel movement model, expressed in
+        // blocks/second for this renderer. Input acceleration is applied in
+        // yaw-relative coordinates; drag is applied after collision resolution.
+        const bool sprinting=captured && (IsKeyDown(KEY_LEFT_CONTROL) ||
+            (gamepad && IsGamepadButtonDown(0,GAMEPAD_BUTTON_LEFT_THUMB)));
+        const float baseSpeed=swimming?1.35f:(crouching?1.30f:(sprinting?7.8f:5.6f));
+        const float targetVX=mx*baseSpeed;
+        const float targetVZ=mz*baseSpeed;
+        const float accel=swimming?7.0f:(grounded?32.0f:5.5f);
+        vx += (targetVX-vx)*std::min(1.0f,accel*controlDt);
+        vz += (targetVZ-vz)*std::min(1.0f,accel*controlDt);
 
         // Keep the player centred in a block cell and resolve X/Z separately,
         // so sliding along walls does not pin the player against corners.
@@ -593,16 +596,18 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         } else vz=0.0f;
 
         const bool nowSwimming=player_in_water(world,px,py,pz);
+        // Vanilla 1.12 jump impulse is 0.42 blocks/tick; convert to the
+        // viewer's world-units/second and retain the renderer's 2-unit blocks.
         if(captured && grounded &&
            (IsKeyPressed(KEY_SPACE)||(gamepad&&button_a()))) {
-            vy=nowSwimming?5.0f:10.5f;
+            vy=nowSwimming?2.4f:25.2f;
             grounded=false;
         }
-        const float gravity=nowSwimming?6.0f:25.0f;
+        const float gravity=nowSwimming?4.8f:23.52f; // 0.08 blocks/tick^2
         vy-=gravity*controlDt;
         if(nowSwimming && captured && IsKeyDown(KEY_SPACE))
-            vy=std::min(vy+22.0f*controlDt,5.0f);
-        vy=std::max(vy,nowSwimming?-8.0f:-55.0f);
+            vy=std::min(vy+7.2f*controlDt,3.0f);
+        vy=std::max(vy,nowSwimming?-4.0f:-55.0f);
         const float nextY=py+vy*controlDt;
         if(player_collides(world,px,nextY,pz)) {
             // Resolve the contact instead of leaving the player at the last
