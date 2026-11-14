@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs><linearGradient id="bg" x2="0" y2="1"><stop stop-color="#102b55"/><stop offset="1" stop-color="#061326"/></linearGradient><linearGradient id="grass" x2="0" y2="1"><stop stop-color="#8be33b"/><stop offset="1" stop-color="#318b22"/></linearGradient><linearGradient id="dirt" x2="0" y2="1"><stop stop-color="#a66a36"/><stop offset="1" stop-color="#56331f"/></linearGradient></defs>
+<rect width="256" height="256" rx="34" fill="url(#bg)"/>
+<path d="M42 91 132 43l86 45-91 50z" fill="url(#grass)" stroke="#b4f36b" stroke-width="4"/>
+<path d="m42 91 85 47v91l-85-51z" fill="#6a4028" stroke="#bd8247" stroke-width="3"/>
+<path d="m127 138 91-50v91l-91 50z" fill="url(#dirt)" stroke="#bd8247" stroke-width="3"/>
+<path d="m62 96 17 9v16l-17-9zm38 21 17 9v16l-17-9zm49-1 18-10v17l-18 10zm35-19 17-9v17l-17 9z" fill="#a3ef45" opacity=".9"/>
+<path d="m75 160 17 9v18l-17-9zm32 20 16 9v18l-16-9zm37-25 16-9v18l-16 9zm31-17 17-9v18l-17 9z" fill="#b2b6bd" opacity=".55"/>
+<path d="m158 39 18-18 30 30-18 18z" fill="#d7dde8" stroke="#65748c" stroke-width="5"/><path d="m183 64 15-15 18 18-15 15z" fill="#8b552d"/><path d="m172 56 13 13-54 54-13-13z" fill="#8b552d" stroke="#d39a55" stroke-width="3"/>
+</svg>
