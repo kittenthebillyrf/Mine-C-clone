@@ -18,7 +18,7 @@ INCLUDES := src
 APP_TITLE := Mine C++ Clone
 APP_AUTHOR := Mine C++ Clone Project
 APP_VERSION := 0.4.0
-ICON := icon.jpg
+ICON := $(TOPDIR)/icon.jpg
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -O2 -Wall -Wextra -ffunction-sections -fdata-sections $(ARCH) $(DEFINES)
