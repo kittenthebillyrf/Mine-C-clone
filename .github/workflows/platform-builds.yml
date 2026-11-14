@@ -61,11 +61,20 @@ jobs:
       DEVKITA64: /opt/devkitpro/devkitA64
     steps:
       - uses: actions/checkout@v4
-      - name: Install Switch graphics libraries and icon converter
+      - name: Install Switch graphics libraries and image tooling
         run: |
-          dkp-pacman -Sy --noconfirm switch-dev switch-mesa switch-glad switch-libdrm_nouveau switch-tools imagemagick
+          dkp-pacman -Sy --noconfirm switch-dev switch-mesa switch-glad switch-libdrm_nouveau switch-tools python python-pillow
       - name: Generate Switch HOME Menu icon
-        run: convert assets/switch/icon.svg -resize 256x256 -background '#07172f' -alpha remove -alpha off -quality 92 icon.jpg
+        run: |
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw
+          im=Image.new("RGB",(256,256),(8,24,48))
+          d=ImageDraw.Draw(im)
+          d.polygon([(32,82),(128,30),(224,82),(128,135)],fill=(104,183,62))
+          d.polygon([(32,82),(128,135),(128,225),(32,170)],fill=(103,68,43))
+          d.polygon([(128,135),(224,82),(224,170),(128,225)],fill=(145,94,54))
+          im.save("icon.jpg",quality=92)
+          PY
       - name: Fetch raylib Nintendo Switch backend
         run: |
           git clone https://github.com/luizpestana/raylib-nx.git raylib-nx
