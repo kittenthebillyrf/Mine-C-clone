@@ -1,6 +1,7 @@
 #pragma once
 #include "raylib.h"
 #include "raymath.h"
+#include <algorithm>
 #include "../world/Block.hpp"
 #include <string>
 #include <vector>
