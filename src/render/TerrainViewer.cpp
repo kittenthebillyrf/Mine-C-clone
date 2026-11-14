@@ -133,6 +133,30 @@ bool player_collides(const mc::world::World& world,float px,float feetY,float pz
     return false;
 }
 
+// Swept axis movement: split displacement into <= 0.10 world-unit slices.
+// This preserves the block-space player coordinates while preventing tunnelling
+// through thin collision boundaries at high frame times.
+float sweep_player_axis(const mc::world::World& world,float& px,float& feetY,float& pz,
+                        float delta,int axis,float worldSize) {
+    if(std::abs(delta)<0.000001f) return 0.0f;
+    const int steps=std::max(1,int(std::ceil(std::abs(delta)/0.10f)));
+    const float part=delta/float(steps);
+    float moved=0.0f;
+    for(int i=0;i<steps;++i) {
+        float nx=px,ny=feetY,nz=pz;
+        if(axis==0) nx=std::clamp(px+part/BLOCK,0.30f,float(worldSize)-0.30f);
+        else if(axis==1) ny=feetY+part;
+        else nz=std::clamp(pz+part/BLOCK,0.30f,float(worldSize)-0.30f);
+        if(player_collides(world,nx,ny,nz)) break;
+        px=nx; feetY=ny; pz=nz; moved+=part;
+    }
+    return moved;
+}
+
+bool player_supported(const mc::world::World& world,float px,float feetY,float pz) {
+    return player_collides(world,px,feetY-0.035f,pz);
+}
+
 bool player_in_water(const mc::world::World& world,float px,float feetY,float pz) {
     constexpr float radius=0.28f*BLOCK;
     constexpr float height=1.75f*BLOCK;
@@ -578,22 +602,43 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         const float targetVX=mx*baseSpeed;
         const float targetVZ=mz*baseSpeed;
         const float accel=swimming?7.0f:(grounded?32.0f:5.5f);
-        vx += (targetVX-vx)*std::min(1.0f,accel*controlDt);
-        vz += (targetVZ-vz)*std::min(1.0f,accel*controlDt);
+        const float response=std::min(1.0f,accel*controlDt);
+        vx += (targetVX-vx)*response;
+        vz += (targetVZ-vz)*response;
+        // Java-like ground/air drag: input accelerates first, then friction.
+        const float horizontalDrag=swimming?0.82f:(grounded?0.60f:0.91f);
+        if(moveLength<0.001f) {
+            const float drag=std::pow(horizontalDrag,controlDt*20.0f);
+            vx*=drag; vz*=drag;
+        }
 
-        // Keep the player centred in a block cell and resolve X/Z separately,
-        // so sliding along walls does not pin the player against corners.
-        const float nextX=std::clamp(px+vx*controlDt,0.5f,float(size)-0.5f);
-        if(!player_collides(world,nextX,py,pz)) px=nextX;
-        else if(grounded && !player_collides(world,nextX,py+BLOCK*0.6f,pz)) {
-            px=nextX; py+=BLOCK*0.6f;
-        } else vx=0.0f;
-
-        const float nextZ=std::clamp(pz+vz*controlDt,0.5f,float(size)-0.5f);
-        if(!player_collides(world,px,py,nextZ)) pz=nextZ;
-        else if(grounded && !player_collides(world,px,py+BLOCK*0.6f,nextZ)) {
-            pz=nextZ; py+=BLOCK*0.6f;
-        } else vz=0.0f;
+        // Resolve horizontal movement with swept AABB checks. Try the vanilla
+        // 0.6-block step only when grounded; otherwise slide independently.
+        const float dx=vx*controlDt, dz=vz*controlDt;
+        const float oldX=px,oldZ=pz,oldY=py;
+        float movedX=sweep_player_axis(world,px,py,pz,dx,0,float(size));
+        if(std::abs(movedX-dx)>0.0001f) {
+            vx=0.0f;
+            if(grounded) {
+                px=oldX; py=oldY+BLOCK*0.6f; pz=oldZ;
+                const float stepX=sweep_player_axis(world,px,py,pz,dx,0,float(size));
+                if(std::abs(stepX-dx)>0.0001f || player_collides(world,px,py-BLOCK*0.6f,pz)) {
+                    px=oldX; py=oldY; pz=oldZ;
+                }
+            }
+        }
+        const float movedZ=sweep_player_axis(world,px,py,pz,dz,2,float(size));
+        if(std::abs(movedZ-dz)>0.0001f) {
+            vz=0.0f;
+            if(grounded) {
+                const float savedX=px,savedY=py,savedZ=pz;
+                px=oldX; py=oldY+BLOCK*0.6f; pz=oldZ;
+                const float stepZ=sweep_player_axis(world,px,py,pz,dz,2,float(size));
+                if(std::abs(stepZ-dz)>0.0001f || player_collides(world,px,py-BLOCK*0.6f,pz)) {
+                    px=savedX; py=savedY; pz=savedZ;
+                }
+            }
+        }
 
         const bool nowSwimming=player_in_water(world,px,py,pz);
         // Vanilla 1.12 jump impulse is 0.42 blocks/tick; convert to the
@@ -608,33 +653,17 @@ int run_terrain_viewer(int map_size,std::uint32_t seed) {
         if(nowSwimming && captured && IsKeyDown(KEY_SPACE))
             vy=std::min(vy+7.2f*controlDt,3.0f);
         vy=std::max(vy,nowSwimming?-4.0f:-55.0f);
-        const float nextY=py+vy*controlDt;
-        if(player_collides(world,px,nextY,pz)) {
-            // Resolve the contact instead of leaving the player at the last
-            // arbitrary frame position (the old code caused tiny ground jitter).
-            if(vy<0.0f) {
-                float blocked=nextY, clear=py;
-                for(int i=0;i<10;++i) {
-                    const float mid=(blocked+clear)*0.5f;
-                    if(player_collides(world,px,mid,pz)) blocked=mid;
-                    else clear=mid;
-                }
-                py=clear;
-                grounded=true;
-            } else if(vy>0.0f) {
-                float clear=py, blocked=nextY;
-                for(int i=0;i<10;++i) {
-                    const float mid=(clear+blocked)*0.5f;
-                    if(player_collides(world,px,mid,pz)) blocked=mid;
-                    else clear=mid;
-                }
-                py=clear;
-                grounded=false;
-            }
+        const float requestedY=vy*controlDt;
+        const float movedY=sweep_player_axis(world,px,py,pz,requestedY,1,float(size));
+        if(std::abs(movedY-requestedY)>0.0001f) {
+            if(vy<0.0f) grounded=true;
             vy=0.0f;
         } else {
-            py=nextY;
             grounded=false;
+        }
+        if(vy<=0.0f && player_supported(world,px,py,pz)) {
+            grounded=true;
+            if(vy<0.0f) vy=0.0f;
         }
         if(py<0.0f) { py=0.0f; vy=0.0f; grounded=true; }
 
