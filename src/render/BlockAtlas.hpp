@@ -43,23 +43,48 @@ inline Image make_block_atlas_image() {
     }
     return image;
 }
+// Load selected vanilla 1.12 block textures from the extracted MCP assets folder.
+// Missing files retain the small procedural fallback so the game remains bootable.
+inline int load_original_block_tiles(Image& atlas) {
+    static const char* files[16] = {
+        "dirt.png", "grass_top.png", "grass_side.png", "stone.png",
+        "sand.png", "water_still.png", "bedrock.png", "log_oak.png",
+        "leaves_oak.png", "gravel.png", "coal_ore.png", "iron_ore.png",
+        "planks_oak.png", "crafting_table_side.png", "crafting_table_top.png",
+        "crafting_table_front.png"
+    };
+    int loaded = 0;
+    for (int tile = 0; tile < 16; ++tile) {
+        const std::string path = std::string("assets/minecraft/textures/blocks/") + files[tile];
+        Image source = LoadImage(path.c_str());
+        if (source.data == nullptr) continue;
+        if (source.width != 16 || source.height != 16)
+            ImageResize(&source, 16, 16);
+        const Rectangle src{0, 0, 16, 16};
+        const Rectangle dst{float((tile % 4) * 16), float((tile / 4) * 16), 16, 16};
+        ImageDraw(&atlas, source, src, dst, WHITE);
+        UnloadImage(source);
+        ++loaded;
+    }
+    return loaded;
+}
 inline int block_atlas_tile(mc::world::BlockId id) {
     using mc::world::BlockId;
     switch(id) {
-        case BlockId::Stone:return 4;
+        case BlockId::Stone:return 3;
         case BlockId::Grass:return 2;
         case BlockId::Dirt:return 0;
-        case BlockId::Sand:return 5;
-        case BlockId::Water:return 6;
-        case BlockId::Bedrock:return 7;
-        case BlockId::Wood:return 8;
-        case BlockId::Leaves:return 3;
-        case BlockId::Gravel:return 10;
-        case BlockId::CoalOre:return 11;
-        case BlockId::IronOre:return 12;
-        case BlockId::Planks:return 13;
+        case BlockId::Sand:return 4;
+        case BlockId::Water:return 5;
+        case BlockId::Bedrock:return 6;
+        case BlockId::Wood:return 7;
+        case BlockId::Leaves:return 8;
+        case BlockId::Gravel:return 9;
+        case BlockId::CoalOre:return 10;
+        case BlockId::IronOre:return 11;
+        case BlockId::Planks:return 12;
         case BlockId::Stick:return 14;
-        case BlockId::CraftingTable:return 15;
+        case BlockId::CraftingTable:return 13;
         default:return 0;
     }
 }
@@ -138,6 +163,8 @@ inline BlockAtlasAssets& load_block_atlas() {
         attempted = true;
         Image image=make_block_atlas_image();
         if(image.data!=nullptr) {
+            const int originalTexturesLoaded = load_original_block_tiles(image);
+            (void)originalTexturesLoaded;
             assets.texture=LoadTextureFromImage(image);
             const bool validAtlas=image.width==64&&image.height==64;
             UnloadImage(image);
@@ -148,6 +175,7 @@ inline BlockAtlasAssets& load_block_atlas() {
                 for(int tile=0;tile<16;++tile) {
                     int side=tile,top=tile,bottom=tile;
                     if(tile==2) { side=2; top=1; bottom=0; }
+                    if(tile==13) { side=13; top=14; bottom=12; }
                     assets.meshes[tile]=make_block_mesh(side,top,bottom);
                 }
             } else if (assets.texture.id != 0) {
